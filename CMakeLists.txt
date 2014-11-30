@@ -1,4 +1,5 @@
 project(interview-satellitesoft)
 
-add_executable(interview-satellitesoft main.cpp)
+include_directories(include)
 
+add_executable(interview-satellitesoft main.cpp)
