@@ -1,7 +1,9 @@
 #ifndef _DATABASE_HPP
 #define _DATABASE_HPP
 
-#include "Server.hpp"
+// #include "Server.hpp"
+#include "Cache.hpp"
+#include "DBReply.hpp"
 #include "common.hpp"
 #include <vector>
 #include <memory>
@@ -11,77 +13,6 @@
 #include <pqxx/pqxx>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
-
-typedef enum _RequestType {
-    REQUEST_POST,
-    REQUEST_DELETE,
-    REQUEST_GET,
-    REQUEST_INVALID
-} RequestType;
-
-typedef struct _PostRequest {
-    bigserial_t id; // -1 if not set
-    char *first_name, *last_name, *birth_date; // NULL if not set
-} PostRequest;
-
-typedef struct _DeleteRequest {
-    bigserial_t id; // should be no less than nil
-} DeleteRequest;
-
-typedef struct _GetRequest {
-    bigserial_t id; // -1 to retrieve all records
-} GetRequest;
-
-// request to db structure
-typedef struct _DBRequest {
-    RequestType request_type;
-    union {
-        PostRequest post_request;
-        DeleteRequest delete_request;
-        GetRequest get_request;
-    } any_request;
-} DBRequest;
-
-typedef enum _DBReplyKind {
-    REPLY_OK,           // 200
-    REPLY_BAD_REQUEST,  // 400
-    REPLY_NOT_FOUND     // 404
-} DBReplyKind;
-
-class DBRecord {
-public:
-    bigserial_t id;
-    std::string first_name, last_name, birth_date;
-};
-
-// typedef struct _DBRecord {
-//     int id;
-//     char *first_name, *last_name, *birth_date;
-// } DBRecord;
-
-class DBReply {
-public:
-    DBReply();
-    ~DBReply();
-
-    void SetKind(DBReplyKind _kind) {
-        m_kind = _kind;
-    };
-    void SetRecords(std::vector<std::shared_ptr<DBRecord>>* _records) {
-        m_records = _records;
-    };
-
-    DBReplyKind Kind(void) const {
-        return m_kind;
-    };
-    std::vector<std::shared_ptr<DBRecord>>* Records(void) const {
-        return m_records;
-    };
-
-protected:
-    DBReplyKind m_kind;
-    std::vector<std::shared_ptr<DBRecord>> *m_records;
-};
 
 // synchronous database access class
 // this class should be used with async (boost:asio) wrapper
@@ -106,7 +37,7 @@ public:
     /*
      * add the request and connection object to working queue
      */
-    void QueueRequest(DBRequest request, connection_object);
+    void QueueRequest(DBRequest db_request, async_server::connection_ptr connection);
 
     /*
      * thread to process queued requests
@@ -132,7 +63,7 @@ protected:
 
     DBReply m_dbreply;
     std::vector<std::shared_ptr<DBRecord>> m_dbrecords;
-    Cache<int, std::shared_ptr<DBRecord>> m_cache;
+    Cache<bigserial_t, std::shared_ptr<DBRecord>> m_cache;
 
     // db thread mutex
     std::mutex m_db_thread_mutex;
@@ -140,7 +71,7 @@ protected:
     // parallel queues for request and connection_objects
     boost::mutex m_queue_mutex;
     std::queue<DBRequest> m_request_queue;
-    std::queue<connection_object&> m_connection_queue;
+    std::queue<async_server::connection_ptr> m_connection_queue;
 
     std::shared_ptr<pqxx::connection> m_connection;      // connection to db
     pqxx::result m_result;              // result of the transaction
@@ -153,56 +84,6 @@ private:
      */
     Database();
     Database(Database const&);
-    Database& operator=();
+    Database& operator=(Database const&);
 };
-
-template<typename Key, typename T>
-class Cache {
-protected:
-    bool m_isValid;
-    std::vector<T> m_cached_values;
-    std::map<Key, T> m_cached_values_map;
-
-public:
-    Cache();
-    ~Cache();
-
-    // check whether the cache is valid
-    bool Valid(void) const {
-        return m_isValid;
-    };
-    // set cache invalid and clear it
-    void SetInvalid(bool invalid = true) {
-        m_isValid = !invalid;
-        m_cached_values.clear();
-        m_cached_values_map.clear();
-    };
-
-    // add value to cache
-    bool AddValue(Key key, T value) {
-        m_cached_values.push_back(value);
-        m_cached_values_map[key] = value;
-        return true;
-    };
-
-    // find cached value by key
-    T FindValue(Key key, bool *found) {
-        if (!m_isValid) {
-            *found = false;
-            return T();
-        }
-        std::map<Key, T>::iterator it = m_cached_values_map.find(key);
-        if (it == m_cached_values_map.end()) {
-            *found = false;
-            return T();
-        }
-        return m_cached_values_map[key];
-    };
-
-    // return array of cached values
-    std::vector<T> const& CachedValues(void) {
-        return m_cached_values;
-    };
-};
-
 #endif
