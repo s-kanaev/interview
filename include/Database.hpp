@@ -2,9 +2,12 @@
 #define _DATABASE_HPP
 
 #include "Server.hpp"
+#include "common.hpp"
 #include <vector>
 #include <memory>
 #include <queue>
+#include <mutex>
+#include <condition_variable>
 #include <pqxx/pqxx>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
@@ -12,20 +15,21 @@
 typedef enum _RequestType {
     REQUEST_POST,
     REQUEST_DELETE,
-    REQUEST_GET
+    REQUEST_GET,
+    REQUEST_INVALID
 } RequestType;
 
 typedef struct _PostRequest {
-    int id; // -1 if not set
+    bigserial_t id; // -1 if not set
     char *first_name, *last_name, *birth_date; // NULL if not set
 } PostRequest;
 
 typedef struct _DeleteRequest {
-    int id; // should be no less than nil
+    bigserial_t id; // should be no less than nil
 } DeleteRequest;
 
 typedef struct _GetRequest {
-    int id; // -1 to retrieve all records
+    bigserial_t id; // -1 to retrieve all records
 } GetRequest;
 
 // request to db structure
@@ -46,7 +50,7 @@ typedef enum _DBReplyKind {
 
 class DBRecord {
 public:
-    int id;
+    bigserial_t id;
     std::string first_name, last_name, birth_date;
 };
 
@@ -130,6 +134,9 @@ protected:
     std::vector<std::shared_ptr<DBRecord>> m_dbrecords;
     Cache<int, std::shared_ptr<DBRecord>> m_cache;
 
+    // db thread mutex
+    std::mutex m_db_thread_mutex;
+    std::condition_variable m_db_thread_cv;
     // parallel queues for request and connection_objects
     boost::mutex m_queue_mutex;
     std::queue<DBRequest> m_request_queue;
