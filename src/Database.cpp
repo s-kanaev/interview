@@ -11,8 +11,6 @@
 
 Database::Database()
 {
-    // create db_thread
-    m_db_thread(Database::DoRequest(), this);
 }
 
 Database::Database(Database const&)
@@ -20,7 +18,7 @@ Database::Database(Database const&)
 }
 
 Database&
-Database::operator=()
+Database::operator=(const Database&)
 {
 }
 
@@ -56,6 +54,9 @@ Database::Connect(std::string _host,
     // initialize cache
     m_cache.SetInvalid();
 
+    // create db_thread
+    m_db_thread = boost::thread(&Database::DoRequest, this);
+
     return true;
 }
 
@@ -86,9 +87,10 @@ Database::CheckRecordByID(int id)
         m_cache.FindValue(id, &found);
     } else {
         std::string _rs("");
-        _rs.append("SELECT id, first_name, last_name, birth_date"+
-        " FROM "+m_table+
-        " WHERE id = "+std::to_string(id));
+        _rs.append("SELECT id, first_name, last_name, birth_date FROM ");
+        _rs.append(m_table);
+        _rs.append(" WHERE id = ");
+        _rs.append(std::to_string(id));
         Request(_rs);
         if (m_result.empty()) found = false;
         else found = true;
@@ -96,11 +98,11 @@ Database::CheckRecordByID(int id)
     return found;
 }
 
-void finalize_request_arguments(char *f_name, char *l_name, char b_date)
+void finalize_request_arguments(char *f_name, char *l_name, char *b_date)
 {
-    if (f_name) free(f_name);
-    if (l_name) free(l_name);
-    if (b_date) free(b_date);
+    if (f_name) free((void*)f_name);
+    if (l_name) free((void*)l_name);
+    if (b_date) free((void*)b_date);
 }
 
 void
@@ -188,8 +190,8 @@ Database::DoGetRequest(GetRequest *get_request)
     bigserial_t id = get_request->id;
 
     if (!m_cache.Valid()) {
-        request_string.append("SELECT id, first_name, last_name, birth_date"+
-                              " FROM "+m_table);
+        request_string.append("SELECT id, first_name, last_name, birth_date FROM ");
+        request_string.append(m_table);
         Request(request_string);
 
         // renew cache
@@ -202,23 +204,24 @@ Database::DoGetRequest(GetRequest *get_request)
             record->first_name = it["first_name"].as<std::string>();
             record->last_name = it["last_name"].as<std::string>();
             record->birth_date = it["birth_date"].as<std::string>();
-            m_cache.AddValue(record);
+            m_cache.AddValue(record->id, record);
         }
         // set it valid
         m_cache.SetInvalid(false);
     }
 
     if (id > 0) {
-        std::shared_ptr<DBRecord> element = m_cache.FindValue(id);
+        bool found;
+        std::shared_ptr<DBRecord> element = m_cache.FindValue(id, &found);
         m_dbrecords.clear();
-        if (element.get()) {
-            m_dbrecords.push_back(m_cache.FindValue(id));
+        if (found) {//element.get()) {
+            m_dbrecords.push_back(element);
             m_dbreply.SetKind(REPLY_OK);
         } else {
             m_dbreply.SetKind(REPLY_NOT_FOUND);
         }
     } else {
-        std::vector<std::shared_ptr<DBRecord>>& res = m_cache.CachedValues();
+        const std::vector<std::shared_ptr<DBRecord>>& res = m_cache.CachedValues();
         // should copy from cached records due to cache invalidation
         // in between to requests
         m_dbrecords = res;
@@ -227,13 +230,13 @@ Database::DoGetRequest(GetRequest *get_request)
 }
 
 void
-Database::QueueRequest(DBRequest db_request, connection_object co)
+Database::QueueRequest(DBRequest db_request, async_server::connection_ptr connection)
 {
     // lock mutex
     boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
     // add request and connection object to queues
     m_request_queue.push(db_request);
-    m_connection_queue.push(co);
+    m_connection_queue.push(connection);
     // unlock mutex
 }
 
@@ -242,20 +245,18 @@ Database::DoRequest(void)
 {
     while (m_connected) {
         // wait for notification to do some requests
-        std::unique_lock<std::mutex> locker(mutex);
+        std::unique_lock<std::mutex> locker(m_db_thread_mutex);
         m_db_thread_cv.wait(locker, [&](){
-            boost::unique_lock<boost::mutex> sl;
-            sl.lock(m_queue_mutex);
+            boost::unique_lock<boost::mutex> sl(m_queue_mutex);
             return !m_request_queue.empty() || !m_connected;
         });
 
-        boost::unique_lock<boost::mutex> scoped_lock;
+        boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
         DBRequest request;
-        connection_object co;
+        async_server::connection_ptr co;
 
         // retrieve request structure and connection_object
         // lock queue mutex
-        scoped_lock.lock(m_queue_mutex);
         while (!m_request_queue.empty()) {
             request = m_request_queue.front();
             m_request_queue.pop();
@@ -283,8 +284,8 @@ Database::DoRequest(void)
             }
 
             // TODO: launch thread to reply to client
-            //threadPool.post(boost::bind(&Server::ReplyToClient, ServerInstance, &m_dbreply, connection_object));
-            scoped_lock.lock(m_queue_mutex);
+            //threadPool.post(boost::bind(&Server::ReplyToClient, ServerInstance, &m_dbreply, async_server::connection_ptr));
+            m_queue_mutex.lock();
         }
     }
 }

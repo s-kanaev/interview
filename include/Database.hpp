@@ -19,7 +19,7 @@
 // singleton class for database requests
 class Database {
 public:
-    Database& getInstance(void);
+    static Database& getInstance(void);
 
     /*
      * connect to database
