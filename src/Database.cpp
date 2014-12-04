@@ -1,5 +1,6 @@
 #include "common.hpp"
 #include "Database.hpp"
+#include "Server.hpp"
 
 #include <cstdio>
 #include <vector>
@@ -44,7 +45,7 @@ Database::Connect(std::string _host,
         m_connection.reset(new pqxx::connection(connection_string));
     }
     catch (std::exception &e) {
-        std::printf("%s\n", e.what());
+        printf("%s\n", e.what());
         return false;
     }
 
@@ -60,6 +61,18 @@ Database::Connect(std::string _host,
     return true;
 }
 
+bool
+Database::Disconnect()
+{
+    // do not allow to add anything to queue
+    boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
+    m_connected = false;
+    m_connection.reset();
+    // force connection and request queue to empty
+    while (!m_connection_queue.empty()) m_connection_queue.pop();
+    while (!m_request_queue.empty()) m_request_queue.pop();
+}
+
 void
 Database::Request(std::string request_string)
 {
@@ -69,10 +82,10 @@ Database::Request(std::string request_string)
         m_result = transaction.exec(request_string);
     }
     catch (pqxx::pqxx_exception &e) {
-        std::printf("pqxx exception: %s\n", e.base().what());
+        printf("pqxx exception: %s\n", e.base().what());
     }
     catch (std::exception &e) {
-        std::printf("standard exception: %s\n", e.what());
+        printf("standard exception: %s\n", e.what());
     }
 
     transaction.commit();
@@ -213,9 +226,9 @@ Database::DoGetRequest(GetRequest *get_request)
     if (id > 0) {
         bool found;
         std::shared_ptr<DBRecord> element = m_cache.FindValue(id, &found);
-        m_dbrecords.clear();
+        m_dbrecords->clear();
         if (found) {//element.get()) {
-            m_dbrecords.push_back(element);
+            m_dbrecords->push_back(element);
             m_dbreply.SetKind(REPLY_OK);
         } else {
             m_dbreply.SetKind(REPLY_NOT_FOUND);
@@ -224,7 +237,8 @@ Database::DoGetRequest(GetRequest *get_request)
         const std::vector<std::shared_ptr<DBRecord>>& res = m_cache.CachedValues();
         // should copy from cached records due to cache invalidation
         // in between to requests
-        m_dbrecords = res;
+        m_dbrecords->clear();
+        m_dbrecords->assign(res.begin(), res.end());
     }
     m_force_reply = true;
 }
@@ -237,6 +251,8 @@ Database::QueueRequest(DBRequest db_request, async_server::connection_ptr connec
     // add request and connection object to queues
     m_request_queue.push(db_request);
     m_connection_queue.push(connection);
+    // notify m_db_thread
+    m_db_thread_cv.notify_all();
     // unlock mutex
 }
 
@@ -257,7 +273,7 @@ Database::DoRequest(void)
 
         // retrieve request structure and connection_object
         // lock queue mutex
-        while (!m_request_queue.empty()) {
+        while (!m_request_queue.empty() && m_connected) {
             request = m_request_queue.front();
             m_request_queue.pop();
             co = m_connection_queue.front();
@@ -265,6 +281,8 @@ Database::DoRequest(void)
 
             // we don't need the lock anymore
             scoped_lock.release();
+
+            m_dbrecords.reset(new std::vector<std::shared_ptr<DBRecord>>);
 
             // execute the request
             switch (request.request_type) {
@@ -279,12 +297,15 @@ Database::DoRequest(void)
                     DoDeleteRequest(&(request.any_request.delete_request));
                     break;
                 default:
+                    m_dbrecords->clear();
                     m_dbreply.SetKind(REPLY_BAD_REQUEST);
                     break;
             }
 
             // TODO: launch thread to reply to client
             //threadPool.post(boost::bind(&Server::ReplyToClient, ServerInstance, &m_dbreply, async_server::connection_ptr));
+            m_dbreply.SetRecords(m_dbrecords);
+            threadPool.post(boost::bind(&ServerSendReply, m_dbreply, co));
             m_queue_mutex.lock();
         }
     }

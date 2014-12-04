@@ -9,25 +9,17 @@
 class DBReply {
 public:
     DBReply();
+    DBReply(const DBReply &ref);
     ~DBReply();
 
-    void SetKind(DBReplyKind _kind) {
-        m_kind = _kind;
-    };
-    void SetRecords(std::vector<std::shared_ptr<DBRecord>>* _records) {
-        m_records = _records;
-    };
-
-    DBReplyKind Kind(void) const {
-        return m_kind;
-    };
-    std::vector<std::shared_ptr<DBRecord>>* Records(void) const {
-        return m_records;
-    };
+    void SetKind(DBReplyKind _kind);
+    void SetRecords(std::shared_ptr<std::vector<std::shared_ptr<DBRecord>>> _records);
+    DBReplyKind Kind(void) const;
+    std::shared_ptr<std::vector<std::shared_ptr<DBRecord>>> Records(void) const;
 
 protected:
     DBReplyKind m_kind;
-    std::vector<std::shared_ptr<DBRecord>> *m_records;
+    std::shared_ptr<std::vector<std::shared_ptr<DBRecord>>> m_records;
 };
 
 #endif
