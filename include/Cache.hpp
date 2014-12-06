@@ -1,6 +1,12 @@
 #ifndef _CACHE_HPP_
 #define _CACHE_HPP_
 
+#include <vector>
+#include <map>
+
+/*
+ * Cache class template. Key - key to refer to cache record. T - cache record type
+ */
 template<typename Key, typename T>
 class Cache {
 protected:
@@ -9,28 +15,43 @@ protected:
     std::map<Key, T> m_cached_values_map;
 
 public:
-    Cache();
-    ~Cache();
+    // create empty cache. validness is undefined
+    Cache() {
+        m_cached_values.clear();
+        m_cached_values_map.clear();
+    }
+    // clear and remove cache
+    ~Cache() {
+        m_cached_values.clear();
+        m_cached_values_map.clear();
+    }
 
-    // check whether the cache is valid
+    // check whether the cache is valid. return true if valid
     bool Valid(void) const {
         return m_isValid;
     };
-    // set cache invalid and clear it
+    // set cache invalid and clear it. or set it valid and do not clear it
     void SetInvalid(bool invalid = true) {
         m_isValid = !invalid;
-        m_cached_values.clear();
-        m_cached_values_map.clear();
+        if (invalid) {
+            m_cached_values.clear();
+            m_cached_values_map.clear();
+        }
     };
 
-    // add value to cache
+    // add value to cache. key - key of the cache record. value - cache record data
     bool AddValue(Key key, T value) {
         m_cached_values.push_back(value);
         m_cached_values_map[key] = value;
         return true;
     };
 
-    // find cached value by key
+    /*
+       find cached record value by key.
+       if record is not found in cache -
+           put false to *found and return an empty record object
+       otherwise - put true to *found and return cached record
+    */
     T FindValue(Key key, bool *found) {
         if (!m_isValid) {
             *found = false;
@@ -45,7 +66,7 @@ public:
         return m_cached_values_map[key];
     };
 
-    // return array of cached values
+    // return array of cached records
     std::vector<T> const& CachedValues(void) {
         return m_cached_values;
     };
