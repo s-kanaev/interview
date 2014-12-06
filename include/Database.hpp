@@ -37,7 +37,7 @@ public:
     /*
      * add the request and connection object to queue
      */
-    void QueueRequest(DBRequest db_request, async_server::connection_ptr connection);
+    void QueueRequest(DBRequest db_request, async_server::connection_ptr &connection);
 
     /*
      * thread to process queued requests

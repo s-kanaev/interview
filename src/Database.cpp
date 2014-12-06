@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <condition_variable>
 #include <pqxx/pqxx>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
@@ -275,13 +276,13 @@ Database::DoGetRequest(GetRequest *get_request)
 }
 
 void
-Database::QueueRequest(DBRequest db_request, async_server::connection_ptr connection)
+Database::QueueRequest(DBRequest db_request, async_server::connection_ptr &connection)
 {
     // lock mutex
     boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
     // add request and connection object to queues
     m_request_queue.push(db_request);
-    m_connection_queue.push(connection);
+    m_connection_queue.push(async_server::connection_ptr(connection));
     // notify m_db_thread
     m_db_thread_cv.notify_all();
     // unlock mutex
@@ -336,7 +337,7 @@ Database::DoRequest(void)
             // launch thread to reply to client
             //threadPool.post(boost::bind(&Server::ReplyToClient, ServerInstance, &m_dbreply, async_server::connection_ptr));
             m_dbreply.SetRecords(m_dbrecords);
-//             threadPool->post(boost::bind(&ServerSendReply, m_dbreply, co));
+            threadPool->post(boost::bind(ServerSendReply, m_dbreply, co));
 
             scoped_lock.lock();
             // check if there is any need to disconnect and do so
