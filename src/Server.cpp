@@ -1,13 +1,21 @@
 #include "common.hpp"
 #include "Server.hpp"
 #include "Database.hpp"
+
 #include <boost/network/protocol/http/server.hpp>
-#include <json_spirit.h>
+#include <boost/shared_ptr.hpp>
+#include <boost/asio/io_service.hpp>
+// #include <json_spirit.h>
+#include <json_spirit_writer_template.h>
+#include <json_spirit_reader_template.h>
 #include <cstring>
 #include <cstdio>
+#include <csignal>
 
 namespace http = boost::network::http;
 namespace utils = boost::network::utils;
+
+std::shared_ptr<async_server> _server;
 
 // asynchronous server request handler
 struct AsyncRequestHandler {
@@ -42,17 +50,24 @@ struct AsyncRequestHandler {
         json_spirit::Value mval;
         json_spirit::Object obj;
         bool success;
-        success = json_spirit::read(request_body, mval);
+        success = json_spirit::read_string<std::string, json_spirit::Value>(request_body, mval);
         if (success) {
-            obj = mval.get_obj();
-            for (int i = 0; i < obj.size(); ++i) {
-                if (obj[i].name_ == "firstName") {
-                    _request->first_name = strdup(obj[i].value_.get_str().data());
-                } else if (obj[i].name_ == "lastName") {
-                    _request->last_name = strdup(obj[i].value_.get_str().data());
-                } else if (obj[i].name_ == "birthDate") {
-                    _request->birth_date = strdup(obj[i].value_.get_str().data());
+            if (mval.type() == json_spirit::obj_type) {
+                obj = mval.get_obj();
+                for (int i = 0; i < obj.size(); ++i) {
+                    if (obj[i].name_ == "firstName") {
+                        _request->first_name = strdup(obj[i].value_.get_str().data());
+                    } else if (obj[i].name_ == "lastName") {
+                        _request->last_name = strdup(obj[i].value_.get_str().data());
+                    } else if (obj[i].name_ == "birthDate") {
+                        _request->birth_date = strdup(obj[i].value_.get_str().data());
+                    }
                 }
+            } else {
+                _request->first_name =
+                _request->last_name =
+                _request->birth_date = NULL;
+                _request->id = 0;
             }
         }
     };
@@ -122,7 +137,7 @@ std::string WriteDBRecordAsJSON(DBRecord *db_record)
     db_record_obj.push_back(json_spirit::Pair("firstName", db_record->first_name));
     db_record_obj.push_back(json_spirit::Pair("lastName", db_record->last_name));
     db_record_obj.push_back(json_spirit::Pair("birthDate", db_record->birth_date));
-    str = json_spirit::write(db_record_obj, json_spirit::pretty_print);
+    str = json_spirit::write_string<json_spirit::Value>(db_record_obj, json_spirit::pretty_print);
     return str;
 }
 
@@ -173,3 +188,36 @@ void ServerSendReply(DBReply db_reply,
     // send the reply
     connection->write(reply_string);
 };
+
+void Signal_INT_TERM_handler(int signum)
+{
+    _server->stop();
+    exit(0);
+}
+
+/*
+   run server.
+   - allocate handler object
+   - allocate server object (put its options)
+   - set sigint/sigterm signals handlers to stop server
+   - call to run() method of server instance
+   - interrupt all threads in thread pool
+   - join all threads in pool
+ */
+void RunServer(std::string address_str, std::string port_str)
+{
+    AsyncRequestHandler request_handler;
+    // cppnetlib 0.11.0-final
+    async_server::options options(request_handler);
+    options.address(address_str)
+           .port(port_str)
+           .thread_pool(threadPool);
+//            .reuse_address(true) // FIXME: ???
+//            .io_service();       // FIXME: ???
+    _server = std::shared_ptr<async_server>(
+        new async_server(async_server::options(options)));
+
+    // TODO: set SIGINT and SIGTERM handlers
+    _server->run(); // it will block, heh?
+    //(void)threadPool;
+}
