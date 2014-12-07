@@ -2,15 +2,24 @@
 #include "Database.hpp"
 #include <iostream>
 
-int main(int argc, char **argv) {
-    std::string _host = "localhost",
-                _port = "5432",
-                _username = "sergey",
-                _password = "me-1991-2",
-                _db_name = "sergey",
-                _table_name = "satellitesoft";
+int main(int argc, char **argv)
+{
+    if (argc < 7) {
+        std::cout << "usage: " << argv[0]
+                  << " host port username password database-name table-name server-host server-port"
+                  << std::endl;
+        return 0;
+    }
+    std::string _host = argv[1],
+                _port = argv[2],
+                _username = argv[3],
+                _password = argv[4],
+                _db_name = argv[5],
+                _table_name = argv[6],
+                _s_host = argv[7],
+                _s_port = argv[8];
     try {
-        bool res = 
+        bool res =
             Database::getInstance().Connect(
                                             _host,
                                             _port,
@@ -30,7 +39,8 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        // do sample request
+/************************************************************
+        // Do sample requests (for test of DB class
         DBRequest _request;
 
         _request.request_type = REQUEST_GET;
@@ -73,9 +83,9 @@ int main(int argc, char **argv) {
         _request.request_type = REQUEST_DELETE;
         _request.any_request.delete_request.id = 1;
         Database::getInstance().QueueRequest(_request, async_server::connection_ptr());
+************************************************************/
 
-
-//         RunServer("127.0.0.1", "1234");
+        RunServer(_s_host, _s_port);
 
         Database::getInstance().Disconnect();
     }
@@ -95,7 +105,7 @@ int main(int argc, char **argv) {
     }
 
     std::cout << "Waiting for thread pool to empty" << std::endl;
-    sleep(5);
+    //sleep(5);
     threadPool.reset();
 
     std::cout << "Terminated normally" << std::endl;
