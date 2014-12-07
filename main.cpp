@@ -4,9 +4,10 @@
 
 int main(int argc, char **argv)
 {
-    if (argc < 7) {
+    if (argc < 9) {
         std::cout << "usage: " << argv[0]
-                  << " host port username password database-name table-name server-host server-port"
+                  << " host port username password"
+                  << " database-name table-name server-host server-port"
                   << std::endl;
         exit(0);
     }
