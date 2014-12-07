@@ -21,28 +21,36 @@ typedef boost::iterator_range<char const *> rValue;
 string host;
 string port;
 
+// used for tests_success, tests_failed counter access synchronization
 std::mutex counters_mutex;
+// used for output synchronization
 std::mutex reply_mutex;
 unsigned int tests_success = 0;
 unsigned int tests_failed = 0;
 
+// callback to receive reply from server
+// reply - pointer to reply string
+// cv - pointer to condition variable to notify sender with
 void response_callback_with_reply(boost::iterator_range<char const *> const &a,
                                   boost::system::error_code const &error_code,
                                   std::string *reply,
                                   std::condition_variable *cv)
 {
     if (!error_code) {
-        std::unique_lock<std::mutex> scoped_lock(reply_mutex);
+        //std::unique_lock<std::mutex> scoped_lock(reply_mutex);
         reply->append(a.begin());
-        //cout << a.begin();
     } else {
         if (error_code == boost::asio::error::eof) {
-            // notify request sender through condition variable
+            // notify request sender with condition variable about transfer finish
             cv->notify_all();
         }
     }
 }
 
+// do a get request
+// auto_test - true if testing autonomously
+// _id - id for autonomous test (0 for no id)
+// _check_for_it - string to find in reply to decide whether reply is correct or no
 void do_get_request(bool auto_test = false,
                     bigserial_t _id = 0,
                     string _check_for_it = string(""))
@@ -79,6 +87,7 @@ void do_get_request(bool auto_test = false,
     std::condition_variable cv;
     std::unique_lock<std::mutex> reply_lock(reply_mutex);
     _response = _client.get(_request, boost::bind(response_callback_with_reply, _1, _2, &reply, &cv));
+    // let's wait for the reply
     cv.wait(reply_lock);
 
     while (!boost::network::http::ready(_response));
@@ -106,6 +115,10 @@ void do_get_request(bool auto_test = false,
     _io_service.reset();
 }
 
+// do a delete request
+// auto_test - true if testing autonomously
+// _id - id for autonomous test (0 for no id)
+// _check_for_it - string to find in reply to decide whether reply is correct or no
 void do_delete_request(bool auto_test = false,
                        bigserial_t _id = 0,
                        string _check_for_it = string(""))
@@ -142,6 +155,7 @@ void do_delete_request(bool auto_test = false,
     std::condition_variable cv;
     std::unique_lock<std::mutex> reply_lock(reply_mutex);
     _response = _client.delete_(_request, boost::bind(response_callback_with_reply, _1, _2, &reply, &cv));
+    // let's wait for the reply
     cv.wait(reply_lock);
 
     while (!boost::network::http::ready(_response));
@@ -169,6 +183,11 @@ void do_delete_request(bool auto_test = false,
     _io_service.reset();
 }
 
+// do a post request
+// auto_test - true if testing autonomously
+// _id - id for autonomous test (0 for no id)
+// _request_data - json data to supply post request with
+// _check_for_it - string to find in reply to decide whether reply is correct or no
 void do_post_request(bool auto_test = false,
                      bigserial_t _id = 0,
                      string _request_data = string(""),
@@ -211,6 +230,7 @@ void do_post_request(bool auto_test = false,
     std::condition_variable cv;
     std::unique_lock<std::mutex> reply_lock(reply_mutex);
     _response = _client.post(_request, _body, boost::bind(response_callback_with_reply, _1, _2, &reply, &cv));
+    // let's wait for the reply
     cv.wait(reply_lock);
 
     while (!boost::network::http::ready(_response));
@@ -240,6 +260,10 @@ void do_post_request(bool auto_test = false,
     _io_service.reset();
 }
 
+// do an empty post request (with single-space data)
+// auto_test - true if testing autonomously
+// _id - id for autonomous test (0 for no id)
+// _check_for_it - string to find in reply to decide whether reply is correct or no
 void do_empty_post_request(bool auto_test = false,
                            bigserial_t _id = 0,
                            string _check_for_it = string(""))
@@ -306,10 +330,10 @@ void do_empty_post_request(bool auto_test = false,
     _io_service.reset();
 }
 
+// single threaded testing
 void do_auto_test(void)
 {
     tests_success = tests_failed = 0;
-    // single threaded testing
     do_get_request(true,
                    0,
                    "200 OK");
@@ -379,6 +403,7 @@ void do_auto_test(void)
          << "\tFail    = " << tests_failed << endl;
 }
 
+// multi threaded testing
 void do_auto_test_mt(void)
 {
     tests_success = tests_failed = 0;
@@ -489,7 +514,6 @@ int main(int argc, char **argv)
 
     cout << "Type in request kind (get, post, empty-post, delete, auto-test, auto-test-mt) :";
     cin >> request_kind;
-    //request_kind = "auto-test";
 
     try {
         if (request_kind == "get") {
