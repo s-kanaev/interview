@@ -231,7 +231,7 @@ void ServerSendReply(DBReply db_reply,
     connection->set_headers(boost::make_iterator_range(common_headers, common_headers+2));
     // send the reply
     connection->write(reply_string);
-};
+}
 
 // server shutdown
 void Signal_INT_TERM_handler(const boost::system::error_code& error,
@@ -266,8 +266,8 @@ void RunServer(std::string address_str, std::string port_str)
         new async_server(async_server::options(options)));
 
     // TODO: set SIGINT and SIGTERM handlers
-    boost::asio::signal_set signals(*iOService, SIGINT, SIGTERM);
-    signals.async_wait(boost::bind(Signal_INT_TERM_handler, _1, _2, _server));
+    boost::asio::signal_set _signals(*iOService, SIGINT, SIGTERM);
+    _signals.async_wait(boost::bind(Signal_INT_TERM_handler, _1, _2, _server));
 
     _server->run(); // it will block
 
