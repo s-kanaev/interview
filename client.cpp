@@ -72,7 +72,7 @@ void do_get_request(bool auto_test = false,
     if (!auto_test) {
         _response = _client.get(_request, response_callback);
     } else {
-        _response = _client.get(_request, boost::bind(response_callback, _1, _2, &reply));
+        _response = _client.get(_request, boost::bind(response_callback_with_reply, _1, _2, &reply));
     }
 
     while (!ready(_response));
@@ -124,9 +124,9 @@ void do_delete_request(bool auto_test = false,
     // create response object
     http::client::response _response;
     if (!auto_test) {
-        _response = _client.get(_request, response_callback);
+        _response = _client.delete_(_request, response_callback);
     } else {
-        _response = _client.get(_request, boost::bind(response_callback, _1, _2, &reply));
+        _response = _client.delete_(_request, boost::bind(response_callback_with_reply, _1, _2, &reply));
     }
 
     while (!ready(_response));
@@ -185,9 +185,9 @@ void do_post_request(bool auto_test = false,
     // create response object
     http::client::response _response;
     if (!auto_test) {
-        _response = _client.get(_request, _body, response_callback);
+        _response = _client.post(_request, _body, response_callback);
     } else {
-        _response = _client.get(_request, _body, boost::bind(response_callback, _1, _2, &reply));
+        _response = _client.post(_request, _body, boost::bind(response_callback_with_reply, _1, _2, &reply));
     }
 
     while (!ready(_response));
@@ -241,9 +241,9 @@ void do_empty_post_request(bool auto_test = false,
     // create response object
     http::client::response _response;
     if (!auto_test) {
-        _response = _client.get(_request, response_callback);
+        _response = _client.post(_request, _body, response_callback);
     } else {
-        _response = _client.get(_request, boost::bind(response_callback, _1, _2, &reply));
+        _response = _client.post(_request, _body, boost::bind(response_callback_with_reply, _1, _2, &reply));
     }
 
     while (!ready(_response));
@@ -326,11 +326,16 @@ void do_auto_test(void)
                     0,
                     "{\"firstName\":\"a\", \"lastName\":\"b\"}",
                     "400 Bad Request");
+
+    cout << "Tests:" << endl
+         << "\tSuccess = " << tests_success << endl
+         << "\tFail    = " << tests_failed << endl;
 }
 
 void do_auto_test_mt(void)
 {
     // TODO multi threaded testing
+    cout << "Not yet implemented" << endl;
 }
 
 int main(int argc, char **argv)
