@@ -65,6 +65,12 @@ public:
 //     char *first_name, *last_name, *birth_date;
 // } DBRecord;
 
+// io service for thread pool
+extern boost::shared_ptr<boost::asio::io_service> iOService;
+extern boost::shared_ptr<boost::asio::io_service::work> iOServiceWork;
+// thread group for thread pool
+extern boost::shared_ptr<boost::thread_group> threadGroup;
+
 // thread pool
 extern boost::shared_ptr<boost::network::utils::thread_pool> threadPool;
 
