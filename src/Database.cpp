@@ -146,7 +146,8 @@ Database::DoPostRequest(PostRequest *post_request)
          *birth_date = post_request->birth_date;
 
     m_force_reply = false;
-    m_dbreply.Records()->clear();
+    m_dbrecords->clear();
+    //m_dbreply.Records()->clear();
 
     if (!first_name || !last_name || !birth_date) {
         m_dbreply.SetKind(REPLY_BAD_REQUEST);
@@ -203,7 +204,7 @@ Database::DoDeleteRequest(DeleteRequest *delete_request)
     bigserial_t id = delete_request->id;
     bool found;
 
-    m_dbreply.Records()->clear();
+    m_dbrecords->clear();
 
     found = CheckRecordByID(id);
 
