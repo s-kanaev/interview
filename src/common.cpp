@@ -18,6 +18,7 @@ boost::shared_ptr<boost::asio::io_service::work> iOServiceWork(
 boost::shared_ptr<boost::thread_group> threadGroup(
         new boost::thread_group());
 
-// create thread pool for THREADS_COUNT threads
+/* create thread pool for THREADS_COUNT threads using the io_service and thread_group
+   we recently allocated */
 boost::shared_ptr<boost::network::utils::thread_pool> threadPool(
     new boost::network::utils::thread_pool(THREADS_COUNT, iOService, threadGroup));

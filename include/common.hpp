@@ -33,7 +33,7 @@ typedef struct _DeleteRequest {
 
 // GET request descriptor
 typedef struct _GetRequest {
-    bigserial_t id; // -1 to retrieve all records
+    bigserial_t id; // 0 to retrieve all records
 } GetRequest;
 
 // unified request descriptor
@@ -59,11 +59,6 @@ public:
     bigserial_t id;
     std::string first_name, last_name, birth_date;
 };
-
-// typedef struct _DBRecord {
-//     int id;
-//     char *first_name, *last_name, *birth_date;
-// } DBRecord;
 
 // io service for thread pool
 extern boost::shared_ptr<boost::asio::io_service> iOService;

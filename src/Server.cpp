@@ -23,7 +23,10 @@ struct AsyncRequestHandler {
 protected:
     // for use with condition variable of post request
     std::mutex m_mutex;
+    // typedef to decrease line length
     typedef boost::iterator_range<char const *> rValue;
+
+    // read from connection for post request
     void ConnectionReadCallback(rValue input_range,
                                 boost::system::error_code error,
                                 std::size_t size,
@@ -36,6 +39,7 @@ protected:
         cv->notify_one();
     }
 
+    // post request handler
     void HandlePostRequest(async_server::request const& request,
                            DBRequest *db_request,
                            async_server::connection_ptr connection)
@@ -45,7 +49,8 @@ protected:
         _request->first_name = _request->last_name = _request->birth_date = NULL;
         _request->id = 0;
         std::string request_body;
-        // get path
+
+        // get request path and an id
         std::string request_path = request.destination;
         if (request_path == "/users") {
             _request->id = 0;
@@ -54,18 +59,31 @@ protected:
             int r = sscanf(request_path.data(), "/users/%llu", &id);
             if ((r > 0) && (id >= 0)) {
                 _request->id = id;
+            } else if (strlen(request_path.data()) > strlen("/users")) {
+                // it is not a valid request - it is neither /users nor /users/id
+                db_request->request_type = REQUEST_INVALID;
+                return;
             } else {
+                // so, we couldn't retrieve and id -> it's an invalid request either
                 db_request->request_type = REQUEST_INVALID;
                 return;
             }
         }
+
+        // conditional to wait for request data receiver
         std::condition_variable cv;
         std::unique_lock<std::mutex> locker(m_mutex);
-        connection->read(boost::bind(&AsyncRequestHandler::ConnectionReadCallback, this, _1, _2, _3, _4, &request_body, &cv));
+
+        // let's read supplementary data
+        connection->read(
+                    boost::bind(
+                        &AsyncRequestHandler::ConnectionReadCallback,
+                        this, _1, _2, _3, _4, &request_body, &cv));
+
         cv.wait(locker);
         m_mutex.unlock();
+
         // decode request_body from json
-        //request_body = request.body;
         if (request_body.empty()) {
             db_request->request_type = REQUEST_INVALID;
             return;
@@ -75,6 +93,7 @@ protected:
         bool success;
         success = json_spirit::read_string<std::string, json_spirit::Value>(request_body, mval);
         if (success) {
+            // valid request should have exactly 3 values
             if ((mval.type() == json_spirit::obj_type) &&
                 (mval.get_obj().size() == 3)) {
                 obj = mval.get_obj();
@@ -86,6 +105,7 @@ protected:
                     } else if (obj[i].name_ == "birthDate") {
                         _request->birth_date = strdup(obj[i].value_.get_str().data());
                     } else {
+                        // neither value of the above? it is invalide request, then
                         db_request->request_type = REQUEST_INVALID;
                         if (_request->first_name) free(_request->first_name);
                         if (_request->last_name) free(_request->last_name);
@@ -101,13 +121,14 @@ protected:
         }
     }
 
+    // delete request handler
     void HandleDeleteRequest(async_server::request const& request,
                              DBRequest *db_request,
                              async_server::connection_ptr connection)
     {
         db_request->request_type = REQUEST_DELETE;
         DeleteRequest *_request = &db_request->any_request.delete_request;
-        // get path
+        // get path and id
         std::string request_path = request.destination;
         bigserial_t id;
         // retrieve id
@@ -133,10 +154,16 @@ protected:
         } else {
             bigserial_t id;
             int r = sscanf(request_path.data(), "/users/%llu", &id);
-            if (r > 0) {
+            if ((r > 0) && (id >= 0)) {
                 _request->id = id;
-            } else {
+            } else if (strlen(request_path.data()) > strlen("/users")) {
+                // it is not a valid request - it is neither /users nor /users/id
                 db_request->request_type = REQUEST_INVALID;
+                return;
+            } else {
+                // so, we couldn't retrieve and id -> it's an invalid request either
+                db_request->request_type = REQUEST_INVALID;
+                return;
             }
         }
     }
@@ -146,6 +173,7 @@ public:
                     async_server::connection_ptr connection)
     {
         DBRequest db_request;
+        // call to appropriate method handler
         if (request.method == "POST") {
             HandlePostRequest(request, &db_request, connection);
         } else if (request.method == "DELETE") {
@@ -153,6 +181,7 @@ public:
         } else if (request.method == "GET") {
             HandleGetRequest(request, &db_request, connection);
         } else {
+            // or think of this request as invalid
             db_request.request_type = REQUEST_INVALID;
         }
         // enqueue request to database
@@ -162,6 +191,7 @@ public:
 };
 
 // asynchronous server reply part
+// put json'ed value to string
 std::string WriteDBRecordAsJSON(DBRecord *db_record)
 {
     json_spirit::Object db_record_obj;
@@ -174,16 +204,19 @@ std::string WriteDBRecordAsJSON(DBRecord *db_record)
     return str;
 }
 
+// reply connection headers
 static async_server::response_header common_headers[] = {
-    {"Connection", "close"},
-    {"Content-Type", "text/plain"},
-    {"Content-Length", "0"}
+    {"Connection", "close"},        // close connection after the transaction
+    {"Content-Type", "text/plain"}, // it's a plain text within the message
+    {"Content-Length", "0"}         // lengs of the message - we will fill it in later
 };
 
 void ServerSendReply(DBReply db_reply,
                      async_server::connection_ptr connection)
 {
+    // full reply string
     std::string reply_string("");
+    // single db record for the reply
     std::string one_record_string("");
     switch (db_reply.Kind()) {
         case REPLY_OK:
@@ -227,7 +260,9 @@ void ServerSendReply(DBReply db_reply,
             reply_string = "400 Bad Request";
             break;
     }
+    // fill in content length to header
     common_headers[2].value = boost::lexical_cast<std::string>(reply_string.length());
+    // set this connection headers
     connection->set_headers(boost::make_iterator_range(common_headers, common_headers+2));
     // send the reply
     connection->write(reply_string);
@@ -238,12 +273,13 @@ void Signal_INT_TERM_handler(const boost::system::error_code& error,
                              int signal,
                              boost::shared_ptr<async_server> server_instance)
 {
+    // just stop it if no error dispatched
     if (!error)
         server_instance->stop();
 }
 
 /*
-   run server.
+   run server:
    - allocate handler object
    - allocate server object (put its options)
    - set sigint/sigterm signals handlers to stop server

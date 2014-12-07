@@ -58,8 +58,7 @@ protected:
     // do disconnect from db
     void DoDisconnect(void);
 
-    bool m_connected = false;
-    bool m_force_reply = false;
+    bool m_connected;
 
     std::string m_table;
 
@@ -91,6 +90,7 @@ protected:
     boost::thread m_db_thread;
 
 private:
+    // as a singleton - no construction from outside, no copy
     Database();
     Database(Database const&);
     Database& operator=(Database const&);

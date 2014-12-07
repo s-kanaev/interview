@@ -11,8 +11,10 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
 
+// constructor
 Database::Database()
 {
+    // we're not connected initialy to any database
     m_do_disconnect = false;
 }
 
@@ -44,6 +46,7 @@ Database::Connect(std::string _host,
 
     if (m_connected) return false;
 
+    // generate connection string
     if (!_host.empty()) connection_string.append("host="+_host+" ");
     if (!_port.empty()) connection_string.append("port="+_port+" ");
     if (!_username.empty()) connection_string.append("user="+_username+" ");
@@ -58,15 +61,17 @@ Database::Connect(std::string _host,
         return false;
     }
 
+    // remember table name
     m_table = _table;
     m_connected = true;
 
-    // initialize cache
+    // initialize cache - set it invalid only
     m_cache.SetInvalid();
 
     // create db_thread
     m_db_thread = boost::thread(&Database::DoRequest, this);
 
+    // do not queue any disconnect yet
     m_do_disconnect = false;
 
     return true;
@@ -75,12 +80,14 @@ Database::Connect(std::string _host,
 void
 Database::Disconnect()
 {
+    // queue disconnect
     m_do_disconnect = true;
 }
 
 void
 Database::DoDisconnect()
 {
+    // we do disconnect here
     m_connected = false;
     m_connection.reset();
     // force connection and request queue to empty
@@ -93,6 +100,7 @@ Database::DoDisconnect()
 void
 Database::Request(std::string request_string)
 {
+    // create transaction to execute and commit
     pqxx::work transaction(*m_connection, request_string);
 
     try {
@@ -114,8 +122,10 @@ Database::CheckRecordByID(int id)
     bool found;
     // check that there is a record for the user with the id provided
     if (m_cache.Valid()) {
+        // either check in the cache
         m_cache.FindValue(id, &found);
     } else {
+        // or check peculiarly in database
         std::string _rs("");
         _rs.append("SELECT id, first_name, last_name, birth_date FROM ");
         _rs.append(m_table);
@@ -129,6 +139,7 @@ Database::CheckRecordByID(int id)
     return found;
 }
 
+// free those strings from post request
 void finalize_request_arguments(char *f_name, char *l_name, char *b_date)
 {
     if (f_name) free((void*)f_name);
@@ -145,10 +156,10 @@ Database::DoPostRequest(PostRequest *post_request)
          *last_name = post_request->last_name,
          *birth_date = post_request->birth_date;
 
-    m_force_reply = false;
+    // reply will not have any records supplied
     m_dbrecords->clear();
-    //m_dbreply.Records()->clear();
 
+    // check if request is valid
     if (!first_name || !last_name || !birth_date) {
         m_dbreply.SetKind(REPLY_BAD_REQUEST);
         finalize_request_arguments(first_name, last_name, birth_date);
@@ -156,7 +167,8 @@ Database::DoPostRequest(PostRequest *post_request)
     }
 
     if (id > 0) {
-        // try to check if it is the id exists in db
+        // id is provided
+        // check if it is the id exists in db
         bool found;
         found = CheckRecordByID(id);
         if (!found) {
@@ -178,6 +190,7 @@ Database::DoPostRequest(PostRequest *post_request)
             request_string.append(";");
         }
     } else {
+        // add new record to table
         // POST /users
         request_string.append("INSERT INTO ");
         request_string.append(m_table);
@@ -206,6 +219,13 @@ Database::DoDeleteRequest(DeleteRequest *delete_request)
 
     m_dbrecords->clear();
 
+    // check if request is valid
+    if (id == 0) {
+        m_dbreply.SetKind(REPLY_BAD_REQUEST);
+        return;
+    }
+
+    // do the request
     found = CheckRecordByID(id);
 
     if (!found) {
@@ -214,7 +234,6 @@ Database::DoDeleteRequest(DeleteRequest *delete_request)
     } else {
         m_dbreply.SetKind(REPLY_OK);
         m_cache.SetInvalid();
-        m_force_reply = false;
         // DELETE /users/173
         request_string.append("DELETE FROM ");
         request_string.append(m_table);
@@ -234,13 +253,15 @@ Database::DoGetRequest(GetRequest *get_request)
     std::string request_string("");
     bigserial_t id = get_request->id;
 
+    // check if cache is valid
     if (!m_cache.Valid()) {
+        // renew cache
         request_string.append("SELECT id, first_name, last_name, birth_date FROM ");
         request_string.append(m_table);
         request_string.append(";");
         Request(request_string);
 
-        // renew cache
+        // copy result of the select to cache
         for (pqxx::result::const_iterator it = m_result.begin();
              it != m_result.end();
              ++it) {
@@ -252,11 +273,13 @@ Database::DoGetRequest(GetRequest *get_request)
             record->birth_date = it["birth_date"].as<std::string>();
             m_cache.AddValue(record->id, record);
         }
-        // set it valid
+        // set cache valid
         m_cache.SetInvalid(false);
     }
 
+    // now we only do get requests with cache
     if (id > 0) {
+        // id provided
         bool found;
         std::shared_ptr<DBRecord> element = m_cache.FindValue(id, &found);
         m_dbrecords->clear();
@@ -273,7 +296,6 @@ Database::DoGetRequest(GetRequest *get_request)
         m_dbrecords->clear();
         m_dbrecords->assign(res.begin(), res.end());
     }
-    m_force_reply = true;
 }
 
 void
@@ -303,9 +325,9 @@ Database::DoRequest(void)
         DBRequest request;
         async_server::connection_ptr co;
 
-        // retrieve request structure and connection_object
-        // lock queue mutex
+        // queue mutex is still locked at this point
         while (!m_request_queue.empty() && m_connected) {
+            // retrieve request structure and connection_object
             request = m_request_queue.front();
             m_request_queue.pop();
             co = m_connection_queue.front();
@@ -339,6 +361,7 @@ Database::DoRequest(void)
             m_dbreply.SetRecords(m_dbrecords);
             threadPool->post(boost::bind(ServerSendReply, m_dbreply, co));
 
+            // lock queue mutex
             scoped_lock.lock();
             // check if there is any need to disconnect and do so
             if (m_do_disconnect && m_request_queue.empty()) {
