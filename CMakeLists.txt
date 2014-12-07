@@ -25,3 +25,6 @@ target_link_libraries(server pthread rt ${libpqxx_LDFLAGS} ${NEED_BOOST_LIBS} ${
 
 add_executable(interview-satellitesoft main.cpp)
 target_link_libraries(interview-satellitesoft server pthread rt ${libpqxx_LDFLAGS} ${NEED_BOOST_LIBS} ${CPPNETLIB_LIBRARIES})
+
+add_executable(client client.cpp)
+target_link_libraries(client ${NEED_BOOST_LIBS} ${CPPNETLIB_LIBRARIES})
