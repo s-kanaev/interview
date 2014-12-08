@@ -211,6 +211,7 @@ static async_server::response_header common_headers[] = {
     {"Content-Length", "0"}         // lengs of the message - we will fill it in later
 };
 
+// send reply to client
 void ServerSendReply(DBReply db_reply,
                      async_server::connection_ptr connection)
 {
