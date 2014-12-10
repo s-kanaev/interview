@@ -9,7 +9,7 @@
 #include <memory>
 #include <queue>
 #include <mutex>
-#include <condition_variable>
+//#include <condition_variable>
 #include <pqxx/pqxx>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
@@ -32,7 +32,7 @@ public:
                  std::string _password,
                  std::string _db_name,
                  std::string _table);
-    // queue disconnect from database
+    // disconnect from database immidiately
     void Disconnect();
     /*
      * add the request and connection object to queue
@@ -53,16 +53,10 @@ protected:
     void DoGetRequest(GetRequest *get_request);
     // explicitly do request
     void Request(std::string request_string);
-    // check for record by id
-    bool CheckRecordByID(int id);
-    // do disconnect from db
-    void DoDisconnect(void);
 
     bool m_connected;
 
     std::string m_table;
-
-    bool m_do_disconnect;
 
     // database reply object
     DBReply m_dbreply;
@@ -72,9 +66,9 @@ protected:
     Cache<bigserial_t, std::shared_ptr<DBRecord>> m_cache;
 
     // db thread mutex
-    std::mutex m_db_thread_mutex;
+    //std::mutex m_db_thread_mutex;
     // condition variable for database thread
-    std::condition_variable m_db_thread_cv;
+    boost::condition_variable m_db_thread_cv;
     // parallel queues for request and connection_objects
     std::queue<DBRequest> m_request_queue;
     std::queue<async_server::connection_ptr> m_connection_queue;

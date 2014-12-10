@@ -15,7 +15,7 @@
 Database::Database()
 {
     // we're not connected initialy to any database
-    m_do_disconnect = false;
+    m_connected = false;
 }
 
 Database::Database(Database const&)
@@ -71,22 +71,15 @@ Database::Connect(std::string _host,
     // create db_thread
     m_db_thread = boost::thread(&Database::DoRequest, this);
 
-    // do not queue any disconnect yet
-    m_do_disconnect = false;
-
     return true;
 }
 
 void
 Database::Disconnect()
 {
-    // queue disconnect
-    m_do_disconnect = true;
-}
-
-void
-Database::DoDisconnect()
-{
+    m_db_thread.interrupt();
+    m_db_thread.join();
+    boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
     // we do disconnect here
     m_connected = false;
     m_connection.reset();
@@ -94,8 +87,6 @@ Database::DoDisconnect()
     while (!m_connection_queue.empty()) m_connection_queue.pop();
     while (!m_request_queue.empty()) m_request_queue.pop();
 }
-
-
 
 void
 Database::Request(std::string request_string)
@@ -114,29 +105,6 @@ Database::Request(std::string request_string)
     }
 
     transaction.commit();
-}
-
-bool
-Database::CheckRecordByID(int id)
-{
-    bool found;
-    // check that there is a record for the user with the id provided
-    if (m_cache.Valid()) {
-        // either check in the cache
-        m_cache.FindValue(id, &found);
-    } else {
-        // or check peculiarly in database
-        std::string _rs("");
-        _rs.append("SELECT id, first_name, last_name, birth_date FROM ");
-        _rs.append(m_table);
-        _rs.append(" WHERE id = ");
-        _rs.append(std::to_string(id));
-        _rs.append(";");
-        Request(_rs);
-        if (m_result.empty()) found = false;
-        else found = true;
-    }
-    return found;
 }
 
 // free those strings from post request
@@ -168,27 +136,18 @@ Database::DoPostRequest(PostRequest *post_request)
 
     if (id > 0) {
         // id is provided
-        // check if it is the id exists in db
-        bool found;
-        found = CheckRecordByID(id);
-        if (!found) {
-            m_dbreply.SetKind(REPLY_NOT_FOUND);
-            finalize_request_arguments(first_name, last_name, birth_date);
-            return;
-        } else {
-            // POST /users/173
-            request_string.append("UPDATE ");
-            request_string.append(m_table);
-            request_string.append(" SET first_name = '");
-            request_string.append(first_name);
-            request_string.append("', last_name = '");
-            request_string.append(last_name);
-            request_string.append("', birth_date = '");
-            request_string.append(birth_date);
-            request_string.append("' WHERE id = ");
-            request_string.append(std::to_string(id));
-            request_string.append(";");
-        }
+        // POST /users/173
+        request_string.append("UPDATE ");
+        request_string.append(m_table);
+        request_string.append(" SET first_name = '");
+        request_string.append(first_name);
+        request_string.append("', last_name = '");
+        request_string.append(last_name);
+        request_string.append("', birth_date = '");
+        request_string.append(birth_date);
+        request_string.append("' WHERE id = ");
+        request_string.append(std::to_string(id));
+        request_string.append(";");
     } else {
         // add new record to table
         // POST /users
@@ -226,25 +185,18 @@ Database::DoDeleteRequest(DeleteRequest *delete_request)
     }
 
     // do the request
-    found = CheckRecordByID(id);
+    m_dbreply.SetKind(REPLY_OK);
+    m_cache.SetInvalid();
+    // DELETE /users/173
+    request_string.append("DELETE FROM ");
+    request_string.append(m_table);
+    request_string.append(" WHERE id = ");
+    request_string.append(std::to_string(id));
+    request_string.append(";");
 
-    if (!found) {
-        m_dbreply.SetKind(REPLY_NOT_FOUND);
-        return;
-    } else {
-        m_dbreply.SetKind(REPLY_OK);
-        m_cache.SetInvalid();
-        // DELETE /users/173
-        request_string.append("DELETE FROM ");
-        request_string.append(m_table);
-        request_string.append(" WHERE id = ");
-        request_string.append(std::to_string(id));
-        request_string.append(";");
-
-        Request(request_string);
-        // it was delete
-        m_dbreply.SetKind(m_result.affected_rows() > 0 ? REPLY_OK : REPLY_NOT_FOUND);
-    }
+    Request(request_string);
+    // it was delete
+    m_dbreply.SetKind(m_result.affected_rows() > 0 ? REPLY_OK : REPLY_NOT_FOUND);
 }
 
 void
@@ -314,19 +266,23 @@ Database::QueueRequest(DBRequest db_request, async_server::connection_ptr &conne
 void
 Database::DoRequest(void)
 {
-    while (m_connected) {
+    boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
+    //std::unique_lock<std::mutex> locker(m_db_thread_mutex);
+    while (m_connected && !boost::this_thread::interruption_requested()) {
         // wait for notification to do some requests
-        std::unique_lock<std::mutex> locker(m_db_thread_mutex);
-        m_db_thread_cv.wait(locker, [&](){
-            boost::unique_lock<boost::mutex> sl(m_queue_mutex);
-            return !m_request_queue.empty() || !m_connected;
+        m_db_thread_cv.wait(scoped_lock, [&](){
+            //boost::unique_lock<boost::mutex> sl(m_queue_mutex);
+            return !m_request_queue.empty() ||
+                   !m_connected ||
+                   boost::this_thread::interruption_requested();
         });
-        boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
         DBRequest request;
         async_server::connection_ptr co;
 
         // queue mutex is still locked at this point
-        while (!m_request_queue.empty() && m_connected) {
+        while (!m_request_queue.empty() &&
+               m_connected &&
+               !boost::this_thread::interruption_requested()) {
             // retrieve request structure and connection_object
             request = m_request_queue.front();
             m_request_queue.pop();
@@ -363,10 +319,6 @@ Database::DoRequest(void)
 
             // lock queue mutex
             scoped_lock.lock();
-            // check if there is any need to disconnect and do so
-            if (m_do_disconnect && m_request_queue.empty()) {
-                DoDisconnect();
-            }
         }
     }
 }
