@@ -404,10 +404,8 @@ void do_auto_test(void)
 }
 
 // multi threaded testing
-void do_auto_test_mt(void)
+void _do_auto_test_mt(void)
 {
-    tests_success = tests_failed = 0;
-
     boost::shared_ptr<boost::thread_group> _thread_group =
             boost::make_shared<boost::thread_group>();
 
@@ -494,6 +492,17 @@ void do_auto_test_mt(void)
                                                   "{\"firstName\":\"a\", \"lastName\":\"b\"}",
                                                   "400 Bad Request"));
 
+    _thread_group->join_all();
+}
+
+void do_auto_test_mt(void)
+{
+    tests_success = tests_failed = 0;
+    boost::shared_ptr<boost::thread_group> _thread_group =
+            boost::make_shared<boost::thread_group>();
+    for (int i = 0; i < 15; ++i) {
+        _thread_group->create_thread(_do_auto_test_mt);
+    }
     _thread_group->join_all();
     cout << "Tests:" << endl
          << "\tSuccess = " << tests_success << endl
