@@ -313,6 +313,7 @@ void ServerSendReply(DBReply db_reply,
     connection->set_headers(boost::make_iterator_range(common_headers, common_headers+2));
     // send the reply
     connection->write(reply_string);
+    connection.reset();
 }
 
 // server shutdown
@@ -367,4 +368,6 @@ void RunServer(std::string address_str, std::string port_str)
     iOService->stop();
 
     threadGroup->join_all();
+
+    _server.reset();
 }
