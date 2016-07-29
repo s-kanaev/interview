@@ -3,6 +3,9 @@
 
 # include "io-service.h"
 # include "timer.h"
+# include "avl-tree.h"
+
+# include <stdint.h>
 
 # define MASTER_UDP_PORT    23456
 
@@ -11,7 +14,15 @@ typedef struct master master_t;
 
 struct master {
     io_service_t *iosvc;
-    tmr_t *tmr;
+    tmr_t tmr;
+
+    int8_t avg_temperature;
+    uint8_t avg_brightness;
+
+    time_t last_avg_timestamp;
+
+    avl_tree_t slaves;
+
     int udp_socket;
 };
 
