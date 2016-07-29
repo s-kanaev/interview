@@ -5,6 +5,10 @@
 
 # define PKD __attribute__((packed))
 
+# define MASTER_REQUEST_TIMEOUT_MSEC    (5000)
+# define MASTER_GONE_TIMEOUT_MSEC       (MASTER_REQUEST_TIMEOUT_MSEC * 2)
+# define MASTER_RESPONSE_TIMEOUT_MSEC   (MASTER_REQUEST_TIMEOUT_MSEC * 9 / 10)
+
 enum {
     PR_REQUEST      = 0x00,
     PR_RESPONSE     = 0x01,
