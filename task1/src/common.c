@@ -39,8 +39,6 @@ int allocate_udp_broadcasting_socket(const char *local_addr,
                      cur_addr->ai_socktype | SOCK_CLOEXEC,
                      cur_addr->ai_protocol);
 
-        sfd = socket(AF_INET, SOCK_DGRAM, 0);
-
         if (sfd < 0)
             continue;
 
@@ -53,6 +51,8 @@ int allocate_udp_broadcasting_socket(const char *local_addr,
                 "Can't set socket option (SO_BROADCAST): %s\n",
                 strerror(errno));
 
+            shutdown(sfd, SHUT_RDWR);
+            close(sfd);
             continue;
         }
 
@@ -65,6 +65,8 @@ int allocate_udp_broadcasting_socket(const char *local_addr,
                 "Can't set socket option (SO_REUSEADDR): %s\n",
                 strerror(errno));
 
+            shutdown(sfd, SHUT_RDWR);
+            close(sfd);
             continue;
         }
 
