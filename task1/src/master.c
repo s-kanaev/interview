@@ -6,6 +6,15 @@
 #include <unistd.h>
 #include <string.h>
 
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/udp.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+
 static
 void timeout(master_t *m) {
     pr_request_t request;
@@ -113,12 +122,67 @@ master_act(master_t *m, const pr_signature_t *packet, int fd) {
 }
 
 /**************** public API ****************/
-void master_init(master_t *m, io_service_t *iosvc) {
+void master_init(master_t *m, io_service_t *iosvc,
+                 const char *local_addr) {
+    static const int BROADCAST = 1;
+    static const int REUSE_ADDR = 1;
+    int sfd;
+    int ret;
+    struct addrinfo *addr_info = NULL, *cur_addr;
+    struct addrinfo hint;
+    struct ifreq ifreq;
+
     assert(m && iosvc);
 
     master_init_(m, iosvc);
 
-    /* TODO allocate UDP socket */
+    /* find suitable local address */
+    memset(&hint, 0, sizeof(hint));
+    hint.ai_family = AF_INET;
+    hint.ai_socktype = SOCK_DGRAM;
+    hint.ai_protocol = 0;
+    hint.ai_flags = AI_PASSIVE;
+    ret = getaddrinfo(local_addr, MASTER_UDP_PORT_STR, &hint, &addr_info);
+    assert(0 == ret);
+
+    for (cur_addr = addr_info; cur_addr != NULL; cur_addr = cur_addr->ai_next) {
+        sfd = socket(cur_addr->ai_family,
+                     cur_addr->ai_socktype | SOCK_CLOEXEC,
+                     cur_addr->ai_protocol);
+
+        sfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+        if (sfd < 0)
+            continue;
+
+        ret = setsockopt(sfd,
+                         SOL_SOCKET, SO_BROADCAST,
+                         &BROADCAST, sizeof(BROADCAST));
+        assert(0 == ret);
+
+        ret = setsockopt(sfd,
+                         SOL_SOCKET, SO_REUSEADDR,
+                         &REUSE_ADDR, sizeof(REUSE_ADDR));
+        assert(0 == ret);
+
+        if (!bind(sfd, cur_addr->ai_addr, cur_addr->ai_addrlen))
+            break;
+
+        shutdown(sfd, SHUT_RDWR);
+        close(sfd);
+    }
+
+    assert(NULL == cur_addr);
+
+    m->udp_socket = sfd;
+    memcpy(&m->local_addr, cur_addr->ai_addr, sizeof(cur_addr->ai_addrlen));
+
+    /* fetch broadcast addr */
+    memset(&ifreq, 0, sizeof(ifreq));
+    ret = ioctl(m->udp_socket, SIOCGIFBRDADDR, &ifreq);
+
+    assert(0 == ret);
+    memcpy(&m->bcast_addr, &(ifreq.ifr_broadaddr), sizeof(m->bcast_addr));
 }
 
 void master_deinit(master_t *m) {
@@ -135,6 +199,7 @@ void master_run(master_t *m) {
     master_arm_timer(m);
 
     io_service_post_job(m->iosvc, m->udp_socket, IO_SVC_OP_READ,
+                        !IOSVC_JOB_ONESHOT,
                         (iosvc_job_function_t)data_received,
                         m);
 

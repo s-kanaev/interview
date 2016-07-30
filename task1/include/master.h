@@ -6,8 +6,10 @@
 # include "avl-tree.h"
 
 # include <stdint.h>
+# include <netinet/in.h>
 
-# define MASTER_UDP_PORT    23456
+# define MASTER_UDP_PORT        23456
+# define MASTER_UDP_PORT_STR    "23456"
 
 struct master;
 typedef struct master master_t;
@@ -32,10 +34,13 @@ struct master {
     /** slaves' lookup tree */
     avl_tree_t slaves;
 
+    struct sockaddr local_addr;
+    struct sockaddr bcast_addr;
     int udp_socket;
 };
 
-void master_init(master_t *m, io_service_t *iosvc);
+void master_init(master_t *m, io_service_t *iosvc,
+                 const char *local_addr);
 void master_deinit(master_t *m);
 void master_run(master_t *m);
 
