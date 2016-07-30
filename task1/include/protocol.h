@@ -6,7 +6,8 @@
 
 # define PKD __attribute__((packed))
 
-# define SLAVE_UDP_PORT 12345
+# define UDP_PORT                       12345
+# define UDP_PORT_STR                   "12345"
 
 # define MASTER_REQUEST_TIMEOUT_MSEC    (5000)
 # define MASTER_GONE_TIMEOUT_MSEC       (MASTER_REQUEST_TIMEOUT_MSEC * 2)

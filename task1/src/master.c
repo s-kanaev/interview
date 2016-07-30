@@ -269,7 +269,7 @@ master_act(master_t *m, const pr_signature_t *packet, int fd,
 void
 master_set_broadcast_addr(master_t *m, struct sockaddr *bcast_addr) {
     memcpy(&m->bcast_addr, bcast_addr, sizeof(*bcast_addr));
-    m->bcast_addr.sin_port = htons(SLAVE_UDP_PORT);
+    m->bcast_addr.sin_port = htons(UDP_PORT);
 }
 
 /**************** public API ****************/
@@ -285,7 +285,7 @@ void master_init(master_t *m, io_service_t *iosvc,
 
     /* find suitable local address */
     m->udp_socket = allocate_udp_broadcasting_socket(local_addr,
-                                                     MASTER_UDP_PORT_STR,
+                                                     UDP_PORT_STR,
                                                      &addr);
 
     if (m->udp_socket < 0) {
@@ -315,6 +315,7 @@ void master_deinit(master_t *m) {
 
     master_deinit(m);
 
+    shutdown(m->udp_socket, SHUT_RDWR);
     close(m->udp_socket);
 }
 
