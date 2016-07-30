@@ -4,6 +4,10 @@
 # include "master.h"
 # include "protocol.h"
 
+# include <stdbool.h>
+
+# define MASTER_AVG_CHANGED true
+
 typedef struct slave_description {
     int8_t temperature;
     uint8_t illumination;
@@ -29,10 +33,10 @@ master_update_slave(master_t *m,
 /**
  * Calculate averages of parameters.
  * \param [in] m master instance
- *
+ * \return \c MASTER_AVG_CHANGED or \c !MASTER_AVG_CHANGED
  * The function will also update \c m->last_avg_timestamp
  */
-void
+bool
 master_calculate_averages(master_t *m);
 
 /**
@@ -86,9 +90,11 @@ master_deinit_(master_t *m);
  * \param [in] m master instance
  * \param [in] packet data received header
  * \param [in] fd UDP socket fd to send response if any
+ * \param [in] remote_addr remote address
  */
 void
-master_act(master_t *m, const pr_signature_t *packet, int fd);
+master_act(master_t *m, const pr_signature_t *packet, int fd,
+           const struct sockaddr_in *remote_addr);
 
 /**
  * Set master's broadcast address.
