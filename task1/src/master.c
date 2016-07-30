@@ -8,7 +8,19 @@
 
 static
 void timeout(master_t *m) {
+    pr_request_t request;
+    request.s.s = PR_REQUEST;
+
     /* TODO send request */
+}
+
+static
+void data_received(int fd, io_svc_op_t op, master_t *m) {
+    pr_signature_t *packet = NULL;
+
+    /* TODO peek, read and parse datagram, ignore if invalid */
+
+    master_act(m, packet, fd);
 }
 
 /**************** private API ****************/
@@ -85,6 +97,21 @@ master_calculate_brightenss(const master_t *m) {
     return m->avg.illumination + 1;
 }
 
+void
+master_act(master_t *m, const pr_signature_t *packet, int fd) {
+    switch (packet->s) {
+        case PR_RESPONSE:
+            /* TODO update slave, calculate averages, send if needs to */
+            break;
+        case PR_VOTE:
+            /* TODO send master reset packet */
+            break;
+        default:
+            /* do nothing if the packet is neither response nor vote */
+            break;
+    }
+}
+
 /**************** public API ****************/
 void master_init(master_t *m, io_service_t *iosvc) {
     assert(m && iosvc);
@@ -107,6 +134,9 @@ void master_run(master_t *m) {
 
     master_arm_timer(m);
 
-    io_service_post_job(m->iosvc, m->udp_socket, IO_SVC_OP_READ, ...);
+    io_service_post_job(m->iosvc, m->udp_socket, IO_SVC_OP_READ,
+                        (iosvc_job_function_t)data_received,
+                        m);
+
     io_service_run(m->iosvc);
 }
