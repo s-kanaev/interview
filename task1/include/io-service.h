@@ -6,6 +6,8 @@
 # include <stdbool.h>
 # include <sys/epoll.h>
 
+# define IOSVC_JOB_ONESHOT true
+
 struct io_service;
 typedef struct io_service io_service_t;
 
