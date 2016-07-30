@@ -2,6 +2,7 @@
 #include "master-private.h"
 #include "protocol.h"
 #include "log.h"
+#include "common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +15,6 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
-#include <net/if.h>
 #include <arpa/inet.h>
 
 #include <sys/socket.h>
@@ -276,96 +276,38 @@ master_set_broadcast_addr(master_t *m, struct sockaddr *bcast_addr) {
 void master_init(master_t *m, io_service_t *iosvc,
                  const char *local_addr,
                  const char *iface) {
-    static const int BROADCAST = 1;
-    static const int REUSE_ADDR = 1;
-    int sfd;
-    int ret;
-    struct addrinfo *addr_info = NULL, *cur_addr;
-    struct addrinfo hint;
-    struct ifreq ifreq;
+    struct addrinfo addr;
+    struct sockaddr brcast_addr;
 
     assert(m && iosvc && local_addr && iface);
 
     master_init_(m, iosvc);
 
     /* find suitable local address */
-    memset(&hint, 0, sizeof(hint));
-    hint.ai_family = AF_INET;
-    hint.ai_socktype = SOCK_DGRAM;
-    hint.ai_protocol = 0;
-    hint.ai_flags = AI_PASSIVE;
-    ret = getaddrinfo(local_addr, MASTER_UDP_PORT_STR, &hint, &addr_info);
+    m->udp_socket = allocate_udp_broadcasting_socket(local_addr,
+                                                     MASTER_UDP_PORT_STR,
+                                                     &addr);
 
-    if (ret != 0) {
+    if (m->udp_socket < 0) {
         LOG(LOG_LEVEL_FATAL,
-            "Couldn't getaddrinfo: %s\n",
+            "Can't locate suitable socket: %s",
             strerror(errno));
+
         abort();
     }
 
-    for (cur_addr = addr_info; cur_addr != NULL; cur_addr = cur_addr->ai_next) {
-        sfd = socket(cur_addr->ai_family,
-                     cur_addr->ai_socktype | SOCK_CLOEXEC,
-                     cur_addr->ai_protocol);
-
-        sfd = socket(AF_INET, SOCK_DGRAM, 0);
-
-        if (sfd < 0)
-            continue;
-
-        ret = setsockopt(sfd,
-                         SOL_SOCKET, SO_BROADCAST,
-                         &BROADCAST, sizeof(BROADCAST));
-
-        if (ret != 0) {
-            LOG(LOG_LEVEL_FATAL,
-                "Can't set socket option (SO_BROADCAST): %s\n",
-                strerror(errno));
-            abort();
-        }
-
-        ret = setsockopt(sfd,
-                         SOL_SOCKET, SO_REUSEADDR,
-                         &REUSE_ADDR, sizeof(REUSE_ADDR));
-
-        if (ret != 0) {
-            LOG(LOG_LEVEL_FATAL,
-                "Can't set socket option (SO_REUSEADDR): %s\n",
-                strerror(errno));
-            abort();
-        }
-
-        if (!bind(sfd, cur_addr->ai_addr, cur_addr->ai_addrlen)) {
-            break;
-        }
-
-        shutdown(sfd, SHUT_RDWR);
-        close(sfd);
-    }
-
-    if (cur_addr == NULL) {
-        LOG(LOG_LEVEL_FATAL,
-            "Can't locate suitable address for %s\n",
-            local_addr);
-        abort();
-    }
-
-    m->udp_socket = sfd;
-    memcpy(&m->local_addr, cur_addr->ai_addr, sizeof(cur_addr->ai_addrlen));
+    memcpy(&m->local_addr, &addr.ai_addr, sizeof(addr.ai_addrlen));
 
     /* fetch broadcast addr */
-    memset(&ifreq, 0, sizeof(ifreq));
-    strncpy(ifreq.ifr_name, iface, IFNAMSIZ - 1);
-    ret = ioctl(m->udp_socket, SIOCGIFBRDADDR, &ifreq);
-
-    if (ret != 0) {
+    if (0 > fetch_broadcast_addr(m->udp_socket, iface, &brcast_addr)) {
         LOG(LOG_LEVEL_FATAL,
             "Can't fetch broadcast address with ioctl(SIOCGIFBRDADDR): %s\n",
             strerror(errno));
+
         abort();
     }
 
-    master_set_broadcast_addr(m, &(ifreq.ifr_broadaddr));
+    master_set_broadcast_addr(m, &brcast_addr);
 }
 
 void master_deinit(master_t *m) {

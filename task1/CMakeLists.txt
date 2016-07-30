@@ -7,7 +7,7 @@ include_directories(include)
 
 file(GLOB lib_src lib/*.c)
 
-set(master_src src/master.c src/master-main.c)
+set(master_src src/master.c src/master-main.c src/common.c)
 set(protocol_src src/protocol.c)
 
 add_library(lib SHARED ${lib_src})
