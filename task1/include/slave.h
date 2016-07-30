@@ -10,9 +10,27 @@
 struct slave;
 typedef struct slave slave_t;
 
+typedef enum {
+    SLAVE_IDLE,             /**< normal slave state */
+    SLAVE_POLLING,          /**< slave initialized or responded to vote */
+    SLAVE_MASTER,           /**< same as \c SLAVE_IDLE but
+                                 mastering other slaves */
+    SLAVE_WAITING_MASTER    /**< slave is idle but has quit the poll
+                                 so won't answer votes*/
+} slave_state_t;
+
 struct slave {
     io_service_t *iosvc;
-    tmr_t tmr;
+    tmr_t master_gone_tmr;
+    tmr_t poll_tmr;
+    tmr_t mastering_tmr;
+
+    slave_state_t state;
+
+    uint32_t max_vote_per_poll;
+
+    uint8_t illumination;
+    int8_t temperature;
 
     struct sockaddr_storage local_addr;
     struct sockaddr_in bcast_addr;
