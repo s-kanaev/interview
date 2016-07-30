@@ -167,3 +167,7 @@ master_set_broadcast_addr(master_t *m, const struct sockaddr *bcast_addr) {
     memcpy(&m->bcast_addr, bcast_addr, sizeof(*bcast_addr));
     m->bcast_addr.sin_port = htons(UDP_PORT);
 }
+
+void master_start(master_t *m) {
+    master_arm_timer(m);
+}

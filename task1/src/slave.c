@@ -264,8 +264,11 @@ void slave_poll_timeout(slave_t *sl) {
     if (sl->state == SLAVE_POLLING) {
         slave_finish_master_polling(sl, SLAVE_MASTER);
         master_init_(&sl->master, sl->iosvc);
-        master_set_broadcast_addr(&sl->master,
-                                  (const struct sockaddr *)&(sl->bcast_addr.sin_addr));
+        master_set_broadcast_addr(
+            &sl->master,
+            (const struct sockaddr *)&sl->bcast_addr);
+        sl->master.udp_socket = sl->udp_socket;
+        master_start(&sl->master);
     }
 }
 
@@ -290,6 +293,10 @@ void slave_finish_master_polling(slave_t *sl, slave_state_t new_state) {
 
 void slave_act(slave_t *sl, const pr_signature_t *packet, int fd,
                const struct sockaddr_in *remote_addr) {
+    LOG(LOG_LEVEL_DEBUG,
+        "Acting within state %#02x for signature: %#02x\n",
+        (int)sl->state,
+        (int)packet->s);
     ACTORS[sl->state](sl, packet, fd, remote_addr);
 }
 
@@ -380,6 +387,10 @@ void data_received(int fd, io_svc_op_t op, slave_t *sl) {
         return;
     }
 
+    if (((struct sockaddr_in *)&remote_addr)->sin_addr.s_addr ==
+        ((struct sockaddr_in *)&sl->local_addr)->sin_addr.s_addr) /* discard */
+        return;
+
     slave_act(sl, packet, fd, (struct sockaddr_in *)&remote_addr);
 }
 
@@ -424,12 +435,11 @@ void slave_disarm_mastering_timer(slave_t *sl) {
 
 /**************** API ****************/
 void slave_init(slave_t *sl, io_service_t *iosvc,
-                const char *local_addr,
                 const char *iface) {
     struct addrinfo addr;
     struct sockaddr brcast_addr;
 
-    assert(sl && iosvc && local_addr && iface);
+    assert(sl && iosvc && iface);
 
     sl->iosvc = iosvc;
 

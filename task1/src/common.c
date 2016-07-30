@@ -14,6 +14,7 @@ int allocate_udp_broadcasting_socket(const char *iface,
     static const int BROADCAST = 1;
     static const int REUSE_ADDR = 1;
 
+    size_t len;
     int sfd, ret;
     struct sockaddr_in addr;
 
@@ -39,6 +40,21 @@ int allocate_udp_broadcasting_socket(const char *iface,
     ret = setsockopt(sfd,
                      SOL_SOCKET, SO_REUSEADDR,
                      &REUSE_ADDR, sizeof(REUSE_ADDR));
+
+    if (ret != 0) {
+        LOG(LOG_LEVEL_WARN,
+            "Can't set socket option (SO_REUSEADDR): %s\n",
+            strerror(errno));
+
+        shutdown(sfd, SHUT_RDWR);
+        close(sfd);
+        return -1;
+    }
+
+    len = strlen(iface);
+    ret = setsockopt(sfd,
+                     SOL_SOCKET, SO_BINDTODEVICE,
+                     (const int *)iface, len < IFNAMSIZ ? len : IFNAMSIZ - 1);
 
     if (ret != 0) {
         LOG(LOG_LEVEL_WARN,
