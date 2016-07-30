@@ -19,22 +19,22 @@ enum {
     PR_RESET_MASTER = 0x04
 };
 
-typedef struct pr_signature PKD {
+typedef struct PKD pr_signature {
     uint8_t s;
 } pr_signature_t;
 
-typedef struct pr_request PKD {
+typedef struct PKD pr_request {
     pr_signature_t s;
     /* empty */
 } pr_request_t;
 
-typedef struct pr_response PKD {
+typedef struct PKD pr_response {
     pr_signature_t s;
     int8_t temperature;
     uint8_t illumination;
 } pr_response_t;
 
-typedef struct pr_msg PKD {
+typedef struct PKD pr_msg {
     pr_signature_t s;
     uint8_t text[4];
     int8_t avg_temperature;
@@ -42,12 +42,12 @@ typedef struct pr_msg PKD {
     uint8_t brightness;
 } pr_msg_t;
 
-typedef struct pr_vote PKD {
+typedef struct PKD pr_vote {
     pr_signature_t s;
     uint32_t vote;
 } pr_vote_t;
 
-typedef struct pr_reset_master PKD {
+typedef struct PKD pr_reset_master {
     pr_signature_t s;
     /* empty */
 } pr_reset_master_t;
