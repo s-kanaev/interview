@@ -168,5 +168,12 @@ void master_run(master_t *m) {
                         (iosvc_job_function_t)data_received,
                         m);
 
+    /* reset master initialy */
+    pr_reset_master_t reset;
+    reset.s.s = PR_RESET_MASTER;
+
+    sendto(m->udp_socket, &reset, sizeof(reset), 0,
+           (struct sockaddr *)&m->bcast_addr, sizeof(m->bcast_addr));
+
     io_service_run(m->iosvc);
 }
