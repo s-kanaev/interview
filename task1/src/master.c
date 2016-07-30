@@ -1,47 +1,111 @@
 #include "master.h"
+#include "master-private.h"
 #include "protocol.h"
 
 #include <assert.h>
 #include <unistd.h>
-
-typedef struct slave_description {
-    int8_t temperature;
-    uint8_t illumination;
-} slave_description_t;
+#include <string.h>
 
 static
 void timeout(master_t *m) {
     /* TODO send request */
 }
 
-void master_init(master_t *m, io_service_t *iosvc) {
-    assert(m && iosvc);
-
+/**************** private API ****************/
+void
+master_init_(master_t *m,
+             io_service_t *iosvc) {
     m->iosvc = iosvc;
+
     timer_init(&m->tmr, m->iosvc);
 
-    m->last_avg_timestamp = 0;
+    memset(&m->sum, 0, sizeof(m->sum));
+    memset(&m->avg, 0, sizeof(m->avg));
 
     avl_tree_init(&m->slaves, true, sizeof(slave_description_t));
-    /* TODO allocate UDP socket */
 }
 
-void master_deinit(master_t *m) {
-    assert(m);
-
-    close(m->udp_socket);
+void
+master_deinit_(master_t *m) {
     timer_deinit(&m->tmr);
+    avl_tree_purge(&m->slaves);
 }
 
-void master_run(master_t *m) {
-    assert(m);
-
+void
+master_arm_timer(master_t *m) {
     timer_set_periodic(
         &m->tmr,
         MASTER_REQUEST_TIMEOUT_MSEC / 1000,
         (MASTER_REQUEST_TIMEOUT_MSEC % 1000) * 1000000,
         (tmr_job_t)timeout, m
     );
+}
+
+void
+master_disarm_timer(master_t *m) {
+    timer_cancel(&m->tmr);
+}
+
+avl_tree_node_t *
+master_update_slave(master_t *m,
+                    uint32_t ip,
+                    const slave_description_t *sd) {
+    avl_tree_node_t *atn = avl_tree_get(&m->slaves, ip);
+    slave_description_t *atn_sd;
+
+    if (!atn) {
+        atn = avl_tree_add(&m->slaves, ip);
+        atn_sd = (slave_description_t *)atn->data;
+        memset(atn_sd, 0, sizeof(*atn_sd));
+    }
+    else
+        atn_sd = (slave_description_t *)atn->data;
+
+    m->sum.temperature -= atn_sd->temperature;
+    m->sum.illumination -= atn_sd->illumination;
+
+    memcpy(atn_sd, sd, sizeof(*atn_sd));
+
+    m->sum.temperature += atn_sd->temperature;
+    m->sum.illumination += atn_sd->illumination;
+}
+
+void
+master_calculate_averages(master_t *m) {
+    m->avg.temperature = m->slaves.count
+                          ? m->sum.temperature / m->slaves.count
+                          : 0;
+    m->avg.illumination = m->slaves.count
+                          ? m->sum.illumination / m->slaves.count
+                          : 0;
+}
+
+uint8_t
+master_calculate_brightenss(const master_t *m) {
+    return m->avg.illumination + 1;
+}
+
+/**************** public API ****************/
+void master_init(master_t *m, io_service_t *iosvc) {
+    assert(m && iosvc);
+
+    master_init_(m, iosvc);
+
+    /* TODO allocate UDP socket */
+}
+
+void master_deinit(master_t *m) {
+    assert(m);
+
+    master_deinit(m);
+
+    close(m->udp_socket);
+}
+
+void master_run(master_t *m) {
+    assert(m);
+
+    master_arm_timer(m);
 
     io_service_post_job(m->iosvc, m->udp_socket, IO_SVC_OP_READ, ...);
     io_service_run(m->iosvc);
