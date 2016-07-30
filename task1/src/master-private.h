@@ -102,6 +102,6 @@ master_act(master_t *m, const pr_signature_t *packet, int fd,
  * \param bcast_addr broadcast address pointer
  */
 void
-master_set_broadcast_addr(master_t *m, struct sockaddr *bcast_addr);
+master_set_broadcast_addr(master_t *m, const struct sockaddr *bcast_addr);
 
 #endif /* _MASTER_PRIVATE_H_ */
