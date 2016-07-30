@@ -90,4 +90,12 @@ master_deinit_(master_t *m);
 void
 master_act(master_t *m, const pr_signature_t *packet, int fd);
 
+/**
+ * Set master's broadcast address.
+ * \param m master instance
+ * \param bcast_addr broadcast address pointer
+ */
+void
+master_set_broadcast_addr(master_t *m, struct sockaddr *bcast_addr);
+
 #endif /* _MASTER_PRIVATE_H_ */

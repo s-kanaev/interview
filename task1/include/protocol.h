@@ -52,4 +52,7 @@ typedef struct PKD pr_reset_master {
     /* empty */
 } pr_reset_master_t;
 
+# define PR_MAX_SIZE (sizeof(pr_msg_t))
+# define PR_MIN_SIZE (sizeof(pr_request_t))
+
 #endif /* _PROTOCL_H_ */
