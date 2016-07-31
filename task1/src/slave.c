@@ -510,7 +510,7 @@ void slave_run(slave_t *sl) {
                         (iosvc_job_function_t)data_received,
                         sl);
 
-    LOG(LOG_LEVEL_INFO, "Starting\n");
+    LOG(LOG_LEVEL_INFO, "Starting (pid: %d)\n", getpid());
 
     io_service_run(sl->iosvc);
 }
