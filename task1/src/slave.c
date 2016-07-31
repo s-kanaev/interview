@@ -93,6 +93,7 @@ slave_actor_t ACTORS[] = {
 /**************** private ****************/
 void slave_idle(slave_t *sl) {
     sl->state = SLAVE_IDLE;
+    sl->max_vote_per_poll = sl->vote_sent = 0;
     slave_arm_master_gone_timer(sl);
 }
 
@@ -218,8 +219,6 @@ void slave_act_poll(slave_t *sl, const pr_signature_t *packet, int fd,
                     const struct sockaddr_in *remote_addr) {
     const pr_vote_t *vote;
 
-    slave_disarm_poll_timer(sl);
-
     switch (packet->s) {
         case PR_VOTE:
             vote = (const pr_vote_t *)packet;
@@ -242,6 +241,7 @@ void slave_act_poll(slave_t *sl, const pr_signature_t *packet, int fd,
                 break;
 
             /* at this point: voting collision */
+            slave_prepare_to_poll(sl, NULL);
             slave_poll(sl);
             break;
 
@@ -253,6 +253,7 @@ void slave_act_poll(slave_t *sl, const pr_signature_t *packet, int fd,
         case PR_REQUEST:
         case PR_MSG:
             slave_idle(sl);
+            slave_finish_master_polling(sl, SLAVE_IDLE);
             slave_act_idle(sl, packet, fd, remote_addr);
             break;
     }
@@ -369,6 +370,9 @@ void slave_initialize_master_polling(slave_t *sl) {
 void slave_finish_master_polling(slave_t *sl, slave_state_t new_state) {
     LOG(LOG_LEVEL_DEBUG,
         "Finish master poll: %d -> %d\n", (int)sl->state, (int)new_state);
+
+    if (SLAVE_POLLING == sl->state)
+        slave_disarm_poll_timer(sl);
 
     sl->state = new_state;
     sl->vote_sent = sl->max_vote_per_poll = 0;
@@ -579,8 +583,7 @@ void slave_deinit(slave_t *sl) {
 void slave_run(slave_t *sl) {
     assert(sl);
 
-    sl->state = SLAVE_IDLE;
-    slave_arm_master_gone_timer(sl);
+    slave_idle(sl);
 
     io_service_post_job(sl->iosvc, sl->udp_socket, IO_SVC_OP_READ,
                         !IOSVC_JOB_ONESHOT,
