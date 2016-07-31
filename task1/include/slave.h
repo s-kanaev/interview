@@ -32,7 +32,7 @@ struct slave {
     uint8_t illumination;
     int8_t temperature;
 
-    struct sockaddr_storage local_addr;
+    struct sockaddr local_addr;
     struct sockaddr_in bcast_addr;
 
     int udp_socket;

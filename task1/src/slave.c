@@ -460,7 +460,8 @@ void slave_init(slave_t *sl, io_service_t *iosvc,
     timer_init(&sl->mastering_tmr, sl->iosvc);
 
     /* find suitable local address */
-    sl->udp_socket = allocate_udp_broadcasting_socket(iface, UDP_PORT);
+    sl->udp_socket = allocate_udp_broadcasting_socket(
+        iface, UDP_PORT, &sl->local_addr);
 
     if (sl->udp_socket < 0) {
         LOG(LOG_LEVEL_FATAL,
@@ -469,8 +470,6 @@ void slave_init(slave_t *sl, io_service_t *iosvc,
 
         abort();
     }
-
-    memcpy(&sl->local_addr, &addr.ai_addr, sizeof(addr.ai_addrlen));
 
     /* fetch broadcast addr */
     if (0 > fetch_broadcast_addr(sl->udp_socket, iface, &brcast_addr)) {
