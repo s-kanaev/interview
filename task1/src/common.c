@@ -5,9 +5,24 @@
 #include <netdb.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <net/if.h>
 #include <sys/ioctl.h>
+#include <sys/signalfd.h>
+
+static
+void signal_caught(int fd, io_svc_op_t op, io_service_t *iosvc) {
+    struct signalfd_siginfo si;
+
+    ssize_t rc = read(fd, &si, sizeof(si));
+
+    if (si.ssi_signo != SIGTERM && si.ssi_signo != SIGINT)
+        return;
+
+    io_service_stop(iosvc, false);
+    close(fd);
+}
 
 int allocate_udp_broadcasting_socket(const char *iface,
                                      uint16_t local_port,
@@ -116,3 +131,37 @@ int fetch_broadcast_addr(int sfd, const char *iface, struct sockaddr *braddr) {
     return 0;
 }
 
+bool wait_for_sigterm_sigint(io_service_t *iosvc) {
+    sigset_t sigset;
+    int ret;
+    int fd = -1;
+
+    ret = sigemptyset(&sigset);
+    if (ret < 0)
+        return false;
+
+    ret = sigaddset(&sigset, SIGTERM);
+    if (ret < 0)
+        return false;
+
+    ret = sigaddset(&sigset, SIGINT);
+    if (ret < 0)
+        return false;
+
+    ret = sigprocmask(SIG_BLOCK, &sigset, NULL);
+    if (ret < 0)
+        return false;
+
+    fd = signalfd(fd, &sigset, 0);
+
+    if (fd < 0) {
+        sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+        return false;
+    }
+
+    io_service_post_job(iosvc, fd, IO_SVC_OP_READ, !IOSVC_JOB_ONESHOT,
+                        (iosvc_job_function_t)signal_caught,
+                        iosvc);
+
+    return true;
+}

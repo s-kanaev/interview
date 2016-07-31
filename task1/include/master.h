@@ -36,7 +36,7 @@ struct master {
     int udp_socket;
 };
 
-void master_init(master_t *m, io_service_t *iosvc,
+bool master_init(master_t *m, io_service_t *iosvc,
                  const char *iface);
 void master_deinit(master_t *m);
 void master_run(master_t *m);

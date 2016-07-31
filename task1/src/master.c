@@ -118,7 +118,7 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
 }
 
 /**************** API ****************/
-void master_init(master_t *m, io_service_t *iosvc,
+bool master_init(master_t *m, io_service_t *iosvc,
                  const char *iface) {
     struct sockaddr brcast_addr;
 
@@ -135,7 +135,7 @@ void master_init(master_t *m, io_service_t *iosvc,
             "Can't locate suitable socket: %s",
             strerror(errno));
 
-        abort();
+        return false;
     }
 
     /* fetch broadcast addr */
@@ -144,16 +144,21 @@ void master_init(master_t *m, io_service_t *iosvc,
             "Can't fetch broadcast address with ioctl(SIOCGIFBRDADDR): %s\n",
             strerror(errno));
 
-        abort();
+        shutdown(m->udp_socket, SHUT_RDWR);
+        close(m->udp_socket);
+
+        return false;
     }
 
     master_set_broadcast_addr(m, &brcast_addr);
+
+    return true;
 }
 
 void master_deinit(master_t *m) {
     assert(m);
 
-    master_deinit(m);
+    master_deinit_(m);
 
     shutdown(m->udp_socket, SHUT_RDWR);
     close(m->udp_socket);
