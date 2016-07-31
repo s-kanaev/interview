@@ -8,6 +8,10 @@
 #include <errno.h>
 #include <string.h>
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 static
 void timeout(master_t *m) {
     pr_request_t request;
