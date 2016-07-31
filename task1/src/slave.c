@@ -346,11 +346,13 @@ void slave_act_waiting_master(slave_t *sl, const pr_signature_t *packet, int fd,
 }
 
 void slave_master_timed_out(slave_t *sl) {
+    LOG_MSG(LOG_LEVEL_DEBUG, "Master timed out\n");
     slave_prepare_to_poll(sl, NULL);
     slave_initialize_master_polling(sl);
 }
 
 void slave_poll_timeout(slave_t *sl) {
+    LOG_MSG(LOG_LEVEL_DEBUG, "Poll timed out\n");
     if (sl->state == SLAVE_POLLING) {
         slave_disarm_poll_timer(sl);
         slave_finish_master_polling(sl, SLAVE_MASTER);
