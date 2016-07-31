@@ -277,7 +277,7 @@ void slave_poll_timeout(slave_t *sl) {
 
 void slave_initialize_master_polling(slave_t *sl) {
     LOG(LOG_LEVEL_DEBUG,
-        "Initialize master poll\n");
+        "Initialize master poll from state: %d\n", (int)sl->state);
 
     sl->state = SLAVE_POLLING;
 
