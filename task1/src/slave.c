@@ -149,6 +149,7 @@ void slave_act_idle(slave_t *sl, const pr_signature_t *packet, int fd,
 
     switch (packet->s) {
         case PR_REQUEST:
+            slave_arm_master_gone_timer(sl);
             slave_fetch_parameters(sl);
             response.s.s = PR_RESPONSE;
             response.illumination = sl->illumination;
@@ -159,6 +160,7 @@ void slave_act_idle(slave_t *sl, const pr_signature_t *packet, int fd,
             break;
 
         case PR_MSG:
+            slave_arm_master_gone_timer(sl);
             slave_memorize(sl, (const pr_msg_t *)packet);
             break;
 
@@ -251,6 +253,7 @@ void slave_act_waiting_master(slave_t *sl, const pr_signature_t *packet, int fd,
             break;
 
         case PR_RESET_MASTER:
+            slave_arm_master_gone_timer(sl);
             slave_finish_master_polling(sl, SLAVE_IDLE);
             break;
     }
@@ -273,12 +276,21 @@ void slave_poll_timeout(slave_t *sl) {
 }
 
 void slave_initialize_master_polling(slave_t *sl) {
+    LOG(LOG_LEVEL_DEBUG,
+        "Initialize master poll\n");
+
     sl->state = SLAVE_POLLING;
 
     slave_poll(sl);
 }
 
 void slave_finish_master_polling(slave_t *sl, slave_state_t new_state) {
+    LOG(LOG_LEVEL_DEBUG,
+        "Finish master poll: %d -> %d\n", (int)sl->state, (int)new_state);
+
+    if (SLAVE_POLLING == sl->state)
+        slave_disarm_poll_timer(sl);
+
     if (SLAVE_MASTER == sl->state) {
         master_deinit_(&sl->master);
         timer_cancel(&sl->mastering_tmr);
@@ -294,9 +306,10 @@ void slave_finish_master_polling(slave_t *sl, slave_state_t new_state) {
 void slave_act(slave_t *sl, const pr_signature_t *packet, int fd,
                const struct sockaddr_in *remote_addr) {
     LOG(LOG_LEVEL_DEBUG,
-        "Acting within state %#02x for signature: %#02x\n",
+        "Acting within state %#02x for signature: %#02x, from: %#08x\n",
         (int)sl->state,
-        (int)packet->s);
+        (int)packet->s,
+        (unsigned int)remote_addr->sin_addr.s_addr);
     ACTORS[sl->state](sl, packet, fd, remote_addr);
 }
 
@@ -496,6 +509,8 @@ void slave_run(slave_t *sl) {
                         !IOSVC_JOB_ONESHOT,
                         (iosvc_job_function_t)data_received,
                         sl);
+
+    LOG(LOG_LEVEL_INFO, "Starting\n");
 
     io_service_run(sl->iosvc);
 }
