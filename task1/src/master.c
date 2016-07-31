@@ -176,5 +176,8 @@ void master_run(master_t *m) {
 
     master_start(m);
 
+    LOG(LOG_LEVEL_DEBUG,
+        "Running (pid: %d)\n", getpid());
+
     io_service_run(m->iosvc);
 }
