@@ -13,6 +13,14 @@ typedef struct unix_socket_server uss_t;
 struct unix_socket_connection;
 typedef struct unix_socket_server_connection uss_connection_t;
 
+typedef bool (*uss_acceptor_t)(uss_t *srv, uss_connection_t *conn, void *ctx);
+typedef void (*uss_reader_t)(uss_t *srv, uss_connection_t *conn,
+                             int error,
+                             void *ctx);
+typedef void (*uss_writer_t)(uss_t *srv, uss_connection_t *conn,
+                             int error,
+                             void *ctx);
+
 struct unix_socket_server {
     io_service_t *iosvc;
     int fd;
@@ -20,6 +28,7 @@ struct unix_socket_server {
     avl_tree_t connections;
 
     uss_acceptor_t acceptor;
+    void *acceptor_ctx;
 };
 
 struct unix_socket_server_connection {
@@ -29,6 +38,7 @@ struct unix_socket_server_connection {
 
     struct {
         uss_reader_t reader;
+        void *ctx;
         void *d;
         size_t waiting;
         size_t currently_read;
@@ -36,21 +46,12 @@ struct unix_socket_server_connection {
 
     struct {
         uss_writer_t writer;
+        void *ctx;
         const void *d;
         size_t total;
         size_t currently_wrote;
     } write_task;
 };
-
-typedef bool (*uss_acceptor_t)(uss_t *srv, uss_connection_t *conn, void *ctx);
-typedef void (*uss_reader_t)(uss_t *srv, uss_connection_t *conn,
-                             int error,
-                             void *d, size_t sz,
-                             void *ctx);
-typedef void (*uss_writer_t)(uss_t *srv, uss_connection_t *conn,
-                             int error,
-                             const void *d, size_t sz,
-                             void *ctx);
 
 bool unix_socket_server_init(uss_t *srv,
                              const char *name /* non-NULL only */,
