@@ -101,6 +101,7 @@ void slave_prepare_to_poll(slave_t *sl, const pr_vote_t *v) {
     sl->state = SLAVE_POLLING;
     sl->max_vote_per_poll = v ? v->vote : 0;
     sl->vote_sent = 0;
+    slave_disarm_master_gone_timer(sl);
 }
 
 void slave_memorize(slave_t *sl, const pr_msg_t *msg) {
@@ -164,13 +165,12 @@ void slave_poll(slave_t *sl) {
         (unsigned int)v,
         (int)(v > sl->max_vote_per_poll));
 
+    sl->vote_sent = v;
+
     if (!(v > sl->max_vote_per_poll)) {
         slave_finish_master_polling(sl, SLAVE_WAITING_MASTER);
         return;
     }
-
-    sl->vote_sent = v;
-    /*sl->max_vote_per_poll = v;*/
 
     vote.s.s = PR_VOTE;
     vote.vote = v;
