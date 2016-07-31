@@ -63,7 +63,7 @@ void slave_disarm_mastering_timer(slave_t *sl);
 
 static
 void slave_initialize_master_polling(slave_t *sl);
-static
+static inline
 void slave_finish_master_polling(slave_t *sl, slave_state_t new_state);
 static
 void slave_poll_timeout(slave_t *sl);
@@ -75,6 +75,10 @@ static
 void slave_poll(slave_t *sl);
 static
 void slave_mastering_timeout(slave_t *sl);
+static inline
+void slave_prepare_to_poll(slave_t *sl, const pr_vote_t *v);
+static inline
+void slave_idle(slave_t *sl);
 
 
 /* static data */
@@ -87,19 +91,37 @@ slave_actor_t ACTORS[] = {
 };
 
 /**************** private ****************/
+void slave_idle(slave_t *sl) {
+    sl->state = SLAVE_IDLE;
+    slave_arm_master_gone_timer(sl);
+}
+
+void slave_prepare_to_poll(slave_t *sl, const pr_vote_t *v) {
+    sl->state = SLAVE_POLLING;
+    sl->max_vote_per_poll = v ? v->vote : 0;
+    sl->vote_sent = 0;
+}
+
 void slave_memorize(slave_t *sl, const pr_msg_t *msg) {
-    LOG(LOG_LEVEL_INFO,
-        "Memorize:\nText: %s\nTemperature: %d\nBrightness: %u\nDate/time: %ld\n",
-        (char *)msg->text,
-        (int)msg->avg_temperature,
-        (int)msg->brightness,
-        (long int)msg->date_time
-    );
+    LOG(LOG_LEVEL_INFO, "Memorize (@ %ld)\n",
+        time(NULL));
+    LOG(LOG_LEVEL_INFO, "  Text: %*s\n",
+        sizeof(msg->text),
+        (const char *)msg->text);
+    LOG(LOG_LEVEL_INFO, "  Temperature: %d\n",
+        (int)msg->avg_temperature);
+    LOG(LOG_LEVEL_INFO, "  Brightness: %u\n",
+        (unsigned int)msg->brightness);
+    LOG(LOG_LEVEL_INFO, "  Date/time: %ld\n",
+        (long int)msg->date_time);
 }
 
 void slave_fetch_parameters(slave_t *sl) {
     sl->temperature = random();
     sl->illumination = random();
+
+    LOG(LOG_LEVEL_DEBUG, "T: %d, IL: %u\n",
+        (int)sl->temperature, (unsigned int)sl->illumination);
 }
 
 void slave_mastering_timeout(slave_t *sl) {
@@ -155,10 +177,12 @@ void slave_poll(slave_t *sl) {
 void slave_act_idle(slave_t *sl, const pr_signature_t *packet, int fd,
                     const struct sockaddr_in *remote_addr) {
     pr_response_t response;
+    const pr_vote_t *vote;
 
     switch (packet->s) {
         case PR_REQUEST:
             slave_arm_master_gone_timer(sl);
+
             slave_fetch_parameters(sl);
             response.s.s = PR_RESPONSE;
             response.illumination = sl->illumination;
@@ -170,7 +194,13 @@ void slave_act_idle(slave_t *sl, const pr_signature_t *packet, int fd,
 
         case PR_MSG:
             slave_arm_master_gone_timer(sl);
+
             slave_memorize(sl, (const pr_msg_t *)packet);
+            break;
+
+        case PR_VOTE:
+            slave_prepare_to_poll(sl, (const pr_vote_t *)packet);
+            slave_initialize_master_polling(sl);
             break;
 
         default:
@@ -181,44 +211,63 @@ void slave_act_idle(slave_t *sl, const pr_signature_t *packet, int fd,
 void slave_act_poll(slave_t *sl, const pr_signature_t *packet, int fd,
                     const struct sockaddr_in *remote_addr) {
     const pr_vote_t *vote;
-    const pr_reset_master_t *reset;
+
+    slave_disarm_poll_timer(sl);
 
     switch (packet->s) {
         case PR_VOTE:
             vote = (const pr_vote_t *)packet;
-            if (vote->vote > sl->max_vote_per_poll) {
+
+            if (sl->max_vote_per_poll < vote->vote)
+                sl->max_vote_per_poll = vote->vote;
+
+            if (vote->vote > sl->vote_sent) {
                 slave_finish_master_polling(sl, SLAVE_WAITING_MASTER);
                 break;
             }
 
+            if (vote->vote < sl->vote_sent)
+                break;
+
+            /* at this point: voting collision */
             slave_poll(sl);
             break;
 
         case PR_RESET_MASTER:
-            reset = (const pr_reset_master_t *)reset;
+            slave_idle(sl);
             slave_finish_master_polling(sl, SLAVE_IDLE);
+            break;
+
+        case PR_REQUEST:
+        case PR_MSG:
+            slave_idle(sl);
+            slave_act_idle(sl, packet, fd, remote_addr);
             break;
     }
 }
 
 void slave_act_master(slave_t *sl, const pr_signature_t *packet, int fd,
                       const struct sockaddr_in *remote_addr) {
-    const pr_vote_t *vote;
+#define IDLE                                \
+do {                                        \
+    master_deinit_(&sl->master);            \
+    slave_disarm_mastering_timer(sl);       \
+    slave_idle(sl);                         \
+} while(0)
+
     pr_response_t response;
 
     switch (packet->s) {
         case PR_VOTE:
-            slave_finish_master_polling(sl, SLAVE_IDLE);
+            IDLE;
 
-            vote = (const pr_vote_t *)packet;
-
-            sl->max_vote_per_poll = vote->vote;
+            slave_prepare_to_poll(sl, (const pr_vote_t *)packet);
 
             slave_initialize_master_polling(sl);
             break;
 
         case PR_REQUEST:
-            slave_finish_master_polling(sl, SLAVE_IDLE);
+            IDLE;
 
             slave_fetch_parameters(sl);
             response.s.s = PR_RESPONSE;
@@ -230,15 +279,20 @@ void slave_act_master(slave_t *sl, const pr_signature_t *packet, int fd,
             break;
 
         case PR_MSG:
-            slave_finish_master_polling(sl, SLAVE_IDLE);
+            IDLE;
 
             slave_memorize(sl, (const pr_msg_t *)packet);
             break;
 
         case PR_RESET_MASTER:
-            slave_finish_master_polling(sl, SLAVE_IDLE);
+            IDLE;
+            break;
+
+        case PR_RESPONSE:
+            master_act(&sl->master, packet, fd, remote_addr);
             break;
     }
+#undef IDLE
 }
 
 void slave_act_waiting_master(slave_t *sl, const pr_signature_t *packet, int fd,
@@ -248,32 +302,28 @@ void slave_act_waiting_master(slave_t *sl, const pr_signature_t *packet, int fd,
 
     switch (packet->s) {
         case PR_VOTE:
-            slave_finish_master_polling(sl, SLAVE_IDLE);
-
-            vote = (const pr_vote_t *)packet;
-
-            sl->max_vote_per_poll = vote->vote;
-
+            slave_disarm_master_gone_timer(sl);
+            slave_prepare_to_poll(sl, (const pr_vote_t *)packet);
             slave_initialize_master_polling(sl);
             break;
 
-        case PR_REQUEST:
-            master_act(&sl->master, packet, fd, remote_addr);
-            break;
-
         case PR_RESET_MASTER:
-            slave_arm_master_gone_timer(sl);
-            slave_finish_master_polling(sl, SLAVE_IDLE);
+        case PR_REQUEST:
+        case PR_MSG:
+            slave_idle(sl);
+            slave_act_idle(sl, packet, fd, remote_addr);
             break;
     }
 }
 
 void slave_master_timed_out(slave_t *sl) {
+    slave_prepare_to_poll(sl, NULL);
     slave_initialize_master_polling(sl);
 }
 
 void slave_poll_timeout(slave_t *sl) {
     if (sl->state == SLAVE_POLLING) {
+        slave_disarm_poll_timer(sl);
         slave_finish_master_polling(sl, SLAVE_MASTER);
         master_init_(&sl->master, sl->iosvc);
         master_set_broadcast_addr(
@@ -288,8 +338,6 @@ void slave_initialize_master_polling(slave_t *sl) {
     LOG(LOG_LEVEL_DEBUG,
         "Initialize master poll from state: %d\n", (int)sl->state);
 
-    sl->state = SLAVE_POLLING;
-
     slave_poll(sl);
 }
 
@@ -297,18 +345,10 @@ void slave_finish_master_polling(slave_t *sl, slave_state_t new_state) {
     LOG(LOG_LEVEL_DEBUG,
         "Finish master poll: %d -> %d\n", (int)sl->state, (int)new_state);
 
-    if (SLAVE_POLLING == sl->state)
-        slave_disarm_poll_timer(sl);
-
-    if (SLAVE_MASTER == sl->state) {
-        master_deinit_(&sl->master);
-        timer_cancel(&sl->mastering_tmr);
-    }
-
     sl->state = new_state;
-    sl->max_vote_per_poll = 0;
+    sl->vote_sent = sl->max_vote_per_poll = 0;
 
-    if (SLAVE_WAITING_MASTER == sl->state || SLAVE_IDLE == sl->state)
+    if (SLAVE_WAITING_MASTER == sl->state)
         slave_arm_master_gone_timer(sl);
 }
 
@@ -513,7 +553,6 @@ void slave_run(slave_t *sl) {
     assert(sl);
 
     sl->state = SLAVE_IDLE;
-
     slave_arm_master_gone_timer(sl);
 
     io_service_post_job(sl->iosvc, sl->udp_socket, IO_SVC_OP_READ,

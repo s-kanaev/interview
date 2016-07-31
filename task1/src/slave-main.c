@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 int main(int argc, char **argv) {
     slave_t slave;
@@ -15,6 +16,8 @@ int main(int argc, char **argv) {
     }
 
     interface = argv[1];
+
+    srandom(time(NULL));
 
     io_service_init(&iosvc);
     slave_init(&slave, &iosvc, interface);
