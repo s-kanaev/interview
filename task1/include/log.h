@@ -11,4 +11,6 @@
 
 # define LOG(level, msg, ...) fprintf(stderr, level msg, __VA_ARGS__)
 
+# define LOG_LN()           fprintf(stderr, "\n")
+
 #endif /* _LOG_H_ */

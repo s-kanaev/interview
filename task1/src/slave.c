@@ -163,7 +163,8 @@ void slave_poll(slave_t *sl) {
         return;
     }
 
-    sl->max_vote_per_poll = v;
+    sl->vote_sent = v;
+    /*sl->max_vote_per_poll = v;*/
 
     vote.s.s = PR_VOTE;
     vote.vote = v;
@@ -354,6 +355,7 @@ void slave_poll_timeout(slave_t *sl) {
             (const struct sockaddr *)&sl->bcast_addr);
         sl->master.udp_socket = sl->udp_socket;
         master_start(&sl->master);
+        slave_arm_mastering_timer(sl);
     }
 }
 
@@ -478,6 +480,8 @@ void data_received(int fd, io_svc_op_t op, slave_t *sl) {
     if (((struct sockaddr_in *)&remote_addr)->sin_addr.s_addr ==
         ((struct sockaddr_in *)&sl->local_addr)->sin_addr.s_addr) /* discard */
         return;
+
+    LOG_LN();
 
     slave_act(sl, packet, fd, (struct sockaddr_in *)&remote_addr);
 }

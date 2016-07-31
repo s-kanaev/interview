@@ -112,6 +112,8 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
         ((struct sockaddr_in *)&m->local_addr)->sin_addr.s_addr) /* discard */
         return;
 
+    LOG_LN();
+
     master_act(m, packet, fd, (struct sockaddr_in *)&remote_addr);
 }
 
