@@ -19,11 +19,11 @@ typedef struct driver_command driver_command_t;
 struct driver_command_argument;
 typedef struct driver_command_argument driver_command_argument_t;
 
-/* TODO handler needs more data to respone! */
 typedef void (*driver_cmd_handler_t)(int idx,
                                      const char *name, size_t name_len,
                                      int argc,
-                                     driver_command_argument_t *argv);
+                                     driver_command_argument_t *argv,
+                                     buffer_t *response);
 
 struct driver_core {
     uss_t uss;
