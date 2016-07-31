@@ -159,6 +159,11 @@ void slave_poll(slave_t *sl) {
     rnd = random();
     v = rnd & 0xffffffff;
 
+    LOG(LOG_LEVEL_DEBUG,
+        "Voting: %#08x, will send: %d\n",
+        (unsigned int)v,
+        (int)(v > sl->max_vote_per_poll));
+
     if (!(v > sl->max_vote_per_poll)) {
         slave_finish_master_polling(sl, SLAVE_WAITING_MASTER);
         return;
@@ -202,7 +207,7 @@ void slave_act_idle(slave_t *sl, const pr_signature_t *packet, int fd,
 
         case PR_VOTE:
             LOG(LOG_LEVEL_DEBUG,
-                "  Vote received while idle: %u vs %u, (max: %u)\n",
+                "  Vote received while idle: %#08x vs %#08x, (max: %#08x)\n",
                 (unsigned int)(((const pr_vote_t *)packet)->vote),
                 (unsigned int)sl->vote_sent,
                 (unsigned int)sl->max_vote_per_poll);
@@ -224,7 +229,7 @@ void slave_act_poll(slave_t *sl, const pr_signature_t *packet, int fd,
             vote = (const pr_vote_t *)packet;
 
             LOG(LOG_LEVEL_DEBUG,
-                "  Vote received while polling: %u vs %u, (max: %u)\n",
+                "  Vote received while polling: %#08x vs %#08x, (max: %#08x)\n",
                 (unsigned int)(((const pr_vote_t *)packet)->vote),
                 (unsigned int)sl->vote_sent,
                 (unsigned int)sl->max_vote_per_poll);
@@ -273,7 +278,7 @@ do {                                        \
     switch (packet->s) {
         case PR_VOTE:
             LOG(LOG_LEVEL_DEBUG,
-                "  Vote received while mastering: %u vs %u, (max: %u)\n",
+                "  Vote received while mastering: %#08x vs %#08x, (max: %#08x)\n",
                 (unsigned int)(((const pr_vote_t *)packet)->vote),
                 (unsigned int)sl->vote_sent,
                 (unsigned int)sl->max_vote_per_poll);
@@ -322,7 +327,7 @@ void slave_act_waiting_master(slave_t *sl, const pr_signature_t *packet, int fd,
     switch (packet->s) {
         case PR_VOTE:
             LOG(LOG_LEVEL_DEBUG,
-                "  Vote received while waiting for master: %u vs %u, (max: %u)\n",
+                "  Vote received while waiting for master: %#08x vs %#08x, (max: %#08x)\n",
                 (unsigned int)(((const pr_vote_t *)packet)->vote),
                 (unsigned int)sl->vote_sent,
                 (unsigned int)sl->max_vote_per_poll);
