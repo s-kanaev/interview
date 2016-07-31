@@ -384,12 +384,10 @@ void slave_finish_master_polling(slave_t *sl, slave_state_t new_state) {
 void slave_act(slave_t *sl, const pr_signature_t *packet, int fd,
                const struct sockaddr_in *remote_addr) {
     LOG(LOG_LEVEL_DEBUG,
-        "Acting within state %#02x for signature: %#02x\n"
-        "  from: %s vs local: %s\n",
+        "Acting within state %#02x for signature: %#02x from %s\n",
         (int)sl->state,
         (int)packet->s,
-        inet_ntoa(remote_addr->sin_addr),
-        inet_ntoa(((struct sockaddr_in *)&sl->local_addr)->sin_addr));
+        inet_ntoa(remote_addr->sin_addr));
 
     ACTORS[sl->state](sl, packet, fd, remote_addr);
 }

@@ -17,6 +17,10 @@ void timeout(master_t *m) {
     pr_request_t request;
     request.s.s = PR_REQUEST;
 
+    LOG(LOG_LEVEL_DEBUG,
+        "Querying slaves: %s\n",
+        inet_ntoa(m->bcast_addr.sin_addr));
+
     sendto(m->udp_socket, &request, sizeof(request), 0,
            (struct sockaddr *)&m->bcast_addr, sizeof(m->bcast_addr));
 }
