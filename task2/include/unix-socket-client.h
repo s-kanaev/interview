@@ -26,6 +26,9 @@ struct unix_socket_client {
 
     usc_connector_t connector;
 
+    char *name;
+    size_t name_len;
+
     struct {
         usc_reader_t reader;
         void *ctx;
@@ -49,6 +52,7 @@ void unix_socket_client_deinit(usc_t *usc);
 bool unix_socket_client_connect(usc_t *usc,
                                 const char *name,
                                 size_t name_len,
+                                usc_connector_t connector,
                                 void *ctx);
 void unix_socket_client_diconnect(usc_t *usc);
 void unix_socket_client_send(usc_t *usc,
