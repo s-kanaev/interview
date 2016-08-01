@@ -114,7 +114,7 @@ void buffer_init(buffer_t *b, size_t size, enum buffer_policy pol) {
 
     b->pol = pol;
     b->real_size = b->user_size = size;
-    b->data = malloc(b->user_size);
+    b->data = size ? malloc(b->user_size) : NULL;
     b->offset = 0;
 }
 

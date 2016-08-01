@@ -216,6 +216,7 @@ void io_service_run(io_service_t *iosvc) {
             }
 
             if (le) {
+                lje = (lookup_job_element_t *)le->data;
                 job = lje->job[op].job;
                 ctx = lje->job[op].ctx;
 
@@ -229,7 +230,16 @@ void io_service_run(io_service_t *iosvc) {
                     }
                 }
 
-                (*job)(fd, op, ctx);
+                if (job)
+                    (*job)(fd, op, ctx);
+                else {
+                    if (le)
+                        epoll_ctl(iosvc->epoll_fd,
+                                  EPOLL_CTL_MOD, lje->fd, &lje->event);
+                    else
+                        epoll_ctl(iosvc->epoll_fd,
+                                  EPOLL_CTL_DEL, fd, NULL);
+                }
             } /* if (lje) */
         }   /* for (op = 0; op < IO_SVC_OP_COUNT; ++op) */
     }   /* while (*running) */
