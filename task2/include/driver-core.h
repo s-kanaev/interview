@@ -39,6 +39,8 @@ struct driver_core {
 
     avl_tree_t connection_state;
 
+    char *path;
+
     void *greeting;
     size_t greeting_length;
 };
