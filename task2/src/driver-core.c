@@ -17,7 +17,7 @@
 
 #define MAX_DIGITS  (10)
 
-#define SUFFIX      ".drv"
+#define SUFFIX      "drv"
 #define SUFFIX_LEN  (sizeof(SUFFIX) - 1)
 
 #define DOT         "."
@@ -214,7 +214,6 @@ void writer(uss_t *srv, uss_connection_t *conn,
                             (uss_reader_t)reader,
                             core);
 }
-
 
 bool acceptor(uss_t *srv, uss_connection_t *conn, driver_core_t *core) {
     avl_tree_node_t *atn = avl_tree_add(&core->connection_state, conn->fd);
