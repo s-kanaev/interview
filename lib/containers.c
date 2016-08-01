@@ -31,6 +31,9 @@ bool realloc_shrinkable(buffer_t *b, size_t newsize) {
         b->data = d;
     }
 
+    if (b->offset > newsize)
+        b->offset = newsize;
+
     return !!d;
 }
 
@@ -52,6 +55,9 @@ bool realloc_nonshrinkable(buffer_t *b, size_t newsize) {
         b->real_size = newsize;
         b->data = d;
     }
+
+    if (b->offset > newsize)
+        b->offset = newsize;
 
     return !!d;
 }
@@ -75,6 +81,10 @@ bool realloc_economic(buffer_t *b, size_t newsize) {
     }
     else {
         b->user_size = newsize;
+
+        if (b->offset > newsize)
+            b->offset = newsize;
+
         return true;
     }
 
@@ -85,6 +95,9 @@ bool realloc_economic(buffer_t *b, size_t newsize) {
         b->real_size = rs;
         b->data = d;
     }
+
+    if (b->offset > newsize)
+        b->offset = newsize;
 
     return !!d;
 }
@@ -102,6 +115,7 @@ void buffer_init(buffer_t *b, size_t size, enum buffer_policy pol) {
     b->pol = pol;
     b->real_size = b->user_size = size;
     b->data = malloc(b->user_size);
+    b->offset = 0;
 }
 
 bool buffer_realloc(buffer_t *b, size_t newsize) {
@@ -273,6 +287,10 @@ void vector_deinit(vector_t *v) {
     buffer_deinit(&v->data);
     v->count = 0;
     v->element_size = 0;
+}
+
+size_t vector_count(const vector_t *v) {
+    return v ? v->count : 0;
 }
 
 /***************************** LIST *****************************/

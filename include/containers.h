@@ -26,6 +26,8 @@ typedef struct buffer {
     size_t user_size;
     /** really allocated size */
     size_t real_size;
+    /** offset for user's use */
+    size_t offset;
 } buffer_t;
 
 /** A vector with dynamic size
@@ -75,6 +77,7 @@ void *vector_end(vector_t *v);
 void *vector_get(vector_t *v, size_t idx);
 void *vector_next(vector_t *v, void *d);
 void *vector_prev(vector_t *v, void *d);
+size_t vector_count(const vector_t *v);
 
 /**** list operations ****/
 void list_init(list_t *l, bool inplace, size_t size);
