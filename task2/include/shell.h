@@ -11,6 +11,9 @@
 struct shell;
 typedef struct shell shell_t;
 
+struct shell_driver;
+typedef struct shell_driver shell_driver_t;
+
 struct shell {
     io_service_t *iosvc;
     int inotify_fd;
@@ -18,10 +21,14 @@ struct shell {
 
     bool running;
 
+    int input_fd;
+    int output_fd;
+
+    buffer_t input_buffer;
     /*
      * Maps UNIX socket basename hash to list of clients.
      * Tree node inplaces list_t.
-     * List inplaces usc_t.
+     * List inplaces shell_driver_t.
      */
     avl_tree_t clients;
 
@@ -29,8 +36,17 @@ struct shell {
     size_t base_path_len;
 };
 
+struct shell_driver {
+    char *name;
+    size_t name_len;
+
+    unsigned int slot;
+
+    usc_t usc;
+};
+
 bool shell_init(shell_t *sh, const char *base_path, size_t base_path_len,
-                io_service_t *iosvc);
+                io_service_t *iosvc, int input_fd, int output_fd);
 void shell_deinit(shell_t *sh);
 void shell_run(shell_t *sh);
 
