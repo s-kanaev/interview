@@ -31,6 +31,9 @@ struct unix_socket_client {
     char *name;
     size_t name_len;
 
+    char *connected_to_name;
+    size_t connected_to_name_len;
+
     struct {
         usc_reader_t reader;
         void *ctx;
@@ -65,5 +68,6 @@ void unix_socket_client_recv(usc_t *usc,
                              size_t sz,
                              usc_reader_t reader,
                              void *ctx);
+bool unix_socket_client_reconnect(usc_t *usc);
 
 #endif /* _UNIX_SOCKET_CLIENT_H_ */
