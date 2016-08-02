@@ -2,6 +2,7 @@
 #include "hash-functions.h"
 #include "containers.h"
 #include "common.h"
+#include "protocol.h"
 #include "log.h"
 
 #include <assert.h>
@@ -12,6 +13,13 @@
 
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
+
+typedef struct {
+    const char *driver_name;
+    size_t driver_name_len;
+
+    unsigned int slot_number;
+} driver_description_t;
 
 static
 void purge_clients_list(avl_tree_node_t *atn);
@@ -35,9 +43,63 @@ static inline
 bool check_unix_socket(shell_t *sh, const char *name, size_t name_len);
 
 static inline
-bool parse_unix_socket_name(shell_t *sh, const char *name, size_t name_len);
+bool parse_unix_socket_name(shell_t *sh, const char *name, size_t name_len,
+                            driver_description_t *dd);
+
+static
+void connector(usc_t *usc, shell_t *sh);
+
+static
+void reader_signature(usc_t *usc, int error, shell_t *sh);
+
+static
+void reader_info(usc_t *usc, int error, shell_t *sh);
+static
+void reader_response(usc_t *usc, int error, shell_t *sh);
 
 /********************** private **********************/
+void reader_signature(usc_t *usc, int error, shell_t *sh) {
+    const pr_signature_t *s = (const pr_signature_t *)usc->read_task.b.data;
+
+    if (error) {
+        /* TODO */
+        return;
+    }
+
+    if (usc->eof) {
+        /* TODO */
+        return;
+    }
+
+    switch (s->s) {
+        case PR_DRV_INFO:
+            break;
+        case PR_DRV_RESPONSE:
+            break;
+        case PR_DRV_COMMAND:
+        default:
+            LOG(LOG_LEVEL_WARN, "Invalid signature %#02x from %*s\n",
+                (unsigned int)s->s,
+                usc->connected_to_name_len,
+                usc->connected_to_name);
+            LOG_MSG(LOG_LEVEL_WARN, "Reconnecting\n");
+
+            if (!unix_socket_client_reconnect(usc)) {
+                /* TODO */
+                return;
+            }
+            /* TODO */
+
+            break;
+    }
+}
+
+
+void connector(usc_t *usc, shell_t *sh) {
+    unix_socket_client_recv(usc, sizeof(pr_signature_t),
+                            (usc_reader_t)reader_signature, sh);
+}
+
 static
 void purge_clients_list(avl_tree_node_t *atn) {
     list_t *l;
@@ -70,7 +132,121 @@ void base_dir_self_deleted(shell_t *sh) {
 }
 
 void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
-    /* TODO */
+    driver_description_t dd;
+    hash_t hash;
+    avl_tree_node_t *atn;
+    list_t *l;
+    list_element_t *le;
+    usc_t *usc;
+    bool inserted = false;
+
+    LOG(LOG_LEVEL_DEBUG, "Created: %*s\n",
+        name_len, name);
+
+    if (!check_unix_socket(sh, name, name_len)) {
+        LOG(LOG_LEVEL_DEBUG, "It is not a readable UNIX socket: %*s\n",
+            name_len, name);
+        return;
+    }
+
+    if (!parse_unix_socket_name(sh, name, name_len, &dd)) {
+        LOG(LOG_LEVEL_DEBUG, "It is not valid readable UNIX socket name: %*s\n",
+            name_len, name);
+        return;
+    }
+
+    hash = hash_pearson(name, name_len);
+
+    atn = avl_tree_add_or_get(&sh->clients, hash, &inserted);
+
+    l = (list_t *)atn->data;
+
+    if (!inserted)
+        list_init(l, true, sizeof(*usc));
+
+    for (le = list_begin(l); le; le = list_next(l, le)) {
+        usc = (usc_t *)le->data;
+
+        if (usc->connected_to_name_len != name_len)
+            continue;
+
+        if (0 == strncmp(usc->connected_to_name, name, name_len))
+            break;
+    }
+
+    if (le) {
+        LOG(LOG_LEVEL_FATAL, "Duplicate driver: %*s\n",
+            name_len, name);
+        abort();
+    }
+
+    le = list_append(l);
+    usc = (usc_t *)le->data;
+
+    if (!unix_socket_client_init(usc, NULL, 0, sh->iosvc)) {
+        LOG(LOG_LEVEL_FATAL,
+            "Can't initialize UNIX socket client for %*s: %s\n",
+            name_len, name, strerror(errno));
+        abort();
+    }
+
+    if (!unix_socket_client_connect(
+        usc, name, name_len,
+        (usc_connector_t)connector, sh)) {
+        LOG(LOG_LEVEL_FATAL, "Can't connect to %*s: %s\n",
+            name_len, name, strerror(errno));
+        abort();
+    }
+}
+
+void base_dir_smth_deleted(shell_t *sh, const char *name, size_t name_len) {
+    driver_description_t dd;
+    hash_t hash;
+    avl_tree_node_t *atn;
+    list_t *l;
+    list_element_t *le;
+    usc_t *usc;
+
+    LOG(LOG_LEVEL_DEBUG, "Deleted: %*s\n",
+        name_len, name);
+
+    if (!parse_unix_socket_name(sh, name, name_len, &dd)) {
+        LOG(LOG_LEVEL_DEBUG, "It is not valid readable UNIX socket name: %*s\n",
+            name_len, name);
+        return;
+    }
+
+    hash = hash_pearson(name, name_len);
+
+    atn = avl_tree_get(&sh->clients, hash);
+
+    if (!atn) {
+        LOG(LOG_LEVEL_WARN, "UNIX socket name was not registered (1): %*s\n",
+            name_len, name);
+        return;
+    }
+
+    l = (list_t *)atn->data;
+
+    for (le = list_begin(l); le; le = list_next(l, le)) {
+        usc = (usc_t *)le->data;
+
+        if (usc->connected_to_name_len != name_len)
+            continue;
+
+        if (name_len && (0 == strncmp(usc->connected_to_name, name, name_len)))
+            break;
+    }
+
+    if (!le) {
+        LOG(LOG_LEVEL_WARN, "UNIX socket name was not registered (2): %*s\n",
+            name_len, name);
+        return;
+    }
+
+    unix_socket_client_deinit(usc);
+
+    list_remove_and_advance(l, le);
 }
 
 ssize_t base_dir_single_event(shell_t *sh, void *base, size_t _offset) {
