@@ -2,6 +2,7 @@
 #include "driver-core.h"
 #include "protocol.h"
 #include "containers.h"
+#include "common.h"
 #include "log.h"
 
 #include <assert.h>
@@ -12,20 +13,6 @@
 #include <unistd.h>
 
 #include <linux/un.h>
-
-#define DIR         "/tmp/driver"
-#define DIR_LEN     (sizeof(DIR) - 1)
-
-#define MAX_DIGITS  (10)
-
-#define SUFFIX      "drv"
-#define SUFFIX_LEN  (sizeof(SUFFIX) - 1)
-
-#define DOT         "."
-#define DOT_LEN     (sizeof(DOT) - 1)
-
-#define SLASH       "/"
-#define SLASH_LEN   (sizeof(SLASH) - 1)
 
 /************ declaratins ************/
 static
