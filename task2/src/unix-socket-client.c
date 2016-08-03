@@ -10,6 +10,7 @@
 #include <errno.h>
 
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 
 #include <linux/un.h>
 
@@ -79,17 +80,35 @@ void data_may_be_sent(int fd, io_svc_op_t op, usc_t *usc) {
 
 void data_may_be_read(int fd, io_svc_op_t op, usc_t *usc) {
     size_t bytes_read = usc->read_task.currently_read;
-    size_t bytes_to_read = usc->read_task.b.user_size - bytes_read;
+    size_t bytes_to_read;
     ssize_t current_read;
     bool eof = false;
-    int err;
+    int err = 0;
+    int pending, rc;
+
+    bytes_to_read = usc->read_task.b.user_size - usc->read_task.b.offset
+                    - bytes_read;
+
+    rc = ioctl(fd, FIONREAD, &pending);
+
+    if (0 == pending) /* EOF */ {
+        io_service_remove_job(usc->iosvc, fd, IO_SVC_OP_READ);
+
+        if (usc->read_task.reader)
+            usc->read_task.reader(usc, err, usc->read_task.ctx);
+
+        return;
+    }
+
+    if (pending > bytes_to_read)
+        pending = bytes_to_read;
 
     errno = 0;
-    while (bytes_to_read && !eof) {
+    while (pending && !eof) {
         current_read = recv(usc->fd,
                             usc->read_task.b.data
                                 + usc->read_task.b.offset + bytes_read,
-                            bytes_to_read,
+                            pending,
                             MSG_DONTWAIT | MSG_NOSIGNAL);
 
         if (current_read < 0) {
@@ -105,7 +124,7 @@ void data_may_be_read(int fd, io_svc_op_t op, usc_t *usc) {
             eof = true;
 
         bytes_read += current_read;
-        bytes_to_read -= current_read;
+        pending -= current_read;
     }
 
     usc->read_task.currently_read = bytes_read;
@@ -118,9 +137,11 @@ void data_may_be_read(int fd, io_svc_op_t op, usc_t *usc) {
 
         if (usc->read_task.reader)
             usc->read_task.reader(usc, err, usc->read_task.ctx);
+
+        return;
     }
 
-    if (bytes_to_read && (errno == EAGAIN || errno == EWOULDBLOCK))
+    if (pending && (errno == EAGAIN || errno == EWOULDBLOCK))
         return;
 
     io_service_remove_job(usc->iosvc, fd, IO_SVC_OP_READ);
@@ -267,7 +288,7 @@ void unix_socket_client_send(usc_t *usc,
                              usc_writer_t writer, void *ctx) {
     assert(usc);
 
-    memset(&(usc->write_task), 0, sizeof(usc->write_task));
+    usc->write_task.currently_wrote = 0;
     buffer_realloc(&usc->write_task.b, sz);
     memcpy(usc->write_task.b.data, d, sz);
     usc->write_task.writer = writer;
@@ -285,7 +306,7 @@ void unix_socket_client_recv(usc_t *usc,
                              usc_reader_t reader, void *ctx) {
     assert(usc);
 
-    memset(&(usc->read_task), 0, sizeof(usc->read_task));
+    usc->read_task.currently_read = 0;
     usc->read_task.b.offset = usc->read_task.b.user_size;
     buffer_realloc(&usc->read_task.b, usc->read_task.b.offset + sz);
     usc->read_task.reader = reader;

@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/ioctl.h>
 
 #define BACKLOG 50
 
@@ -118,10 +119,28 @@ void data_may_be_sent(int fd, io_svc_op_t op, uss_connection_t *ussc) {
 
 void data_may_be_read(int fd, io_svc_op_t op, uss_connection_t *ussc) {
     size_t bytes_read = ussc->read_task.currently_read;
-    size_t bytes_to_read = ussc->read_task.b.user_size - bytes_read;
+    size_t bytes_to_read;
     ssize_t current_read;
     bool eof = false;
-    int err;
+    int err = 0;
+    int pending, rc;
+
+    bytes_to_read = ussc->read_task.b.user_size -ussc->read_task.b.offset
+                    - bytes_read;
+
+    rc = ioctl(fd, FIONREAD, &pending);
+
+    if (0 == pending) /* EOF */ {
+        io_service_remove_job(ussc->host->iosvc, fd, IO_SVC_OP_READ);
+
+        if (ussc->read_task.reader)
+            ussc->read_task.reader(ussc->host, ussc, err, ussc->read_task.ctx);
+
+        return;
+    }
+
+    if (pending > bytes_to_read)
+        pending = bytes_to_read;
 
     errno = 0;
     while (bytes_to_read && !eof) {
@@ -233,7 +252,7 @@ void unix_socket_server_send(uss_t *srv, uss_connection_t *conn,
                              uss_writer_t writer, void *ctx) {
     assert(srv && conn);
 
-    memset(&(conn->write_task), 0, sizeof(conn->write_task));
+    conn->write_task.currently_wrote = 0;
     buffer_realloc(&conn->write_task.b, sz);
     memcpy(conn->write_task.b.data, d, sz);
     conn->write_task.writer = writer;
@@ -251,7 +270,7 @@ void unix_socket_server_recv(uss_t *srv, uss_connection_t *conn,
                              uss_reader_t reader, void *ctx) {
     assert(srv && conn);
 
-    memset(&(conn->read_task), 0, sizeof(conn->read_task));
+    conn->read_task.currently_read = 0;
     conn->read_task.b.offset = conn->read_task.b.user_size;
     buffer_realloc(&conn->read_task.b, conn->read_task.b.offset + sz);
     conn->read_task.reader = reader;
