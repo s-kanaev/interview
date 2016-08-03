@@ -49,12 +49,25 @@
 #define SPACE               " "
 #define SPACE_LEN           (sizeof(SPACE) - 1)
 
+#define DRIVER_SLOT_ID(name, name_len, slot)    \
+char ID[name_len + MAX_DIGITS + 1];             \
+size_t ID_len;                                  \
+                                                \
+ID_len = sprintf(ID, "%*s%u",                   \
+                 name_len, name, slot);
+
+
 typedef struct {
     const char *driver_name;
     size_t driver_name_len;
 
     unsigned int slot_number;
 } driver_description_t;
+
+typedef struct {
+    const char *arg;
+    uint8_t len;
+} arg_from_input_t;
 
 static
 void purge_clients_list(avl_tree_node_t *atn);
@@ -179,7 +192,83 @@ void cmd_invalid(shell_t *sh) {
 void cmd_cmd(shell_t *sh,
              const char *drv, unsigned int slot, const char *cmd,
              vector_t *args) {
-    /* TODO driver command */
+    buffer_t b;
+    size_t length_required;
+    pr_driver_command_argument_t *pdca;
+    pr_driver_command_t *pdc;
+    size_t idx;
+    arg_from_input_t *afi;
+    uint8_t *arg_val;
+    avl_tree_node_t *atn;
+    hash_t hash;
+    list_t *l;
+    list_element_t *le;
+    shell_driver_t *sd;
+    size_t drv_len = strlen(drv);
+
+    DRIVER_SLOT_ID(drv, drv_len, slot);
+    hash = hash_pearson(ID, ID_len);
+    atn = avl_tree_get(&sh->clients, hash);
+    if (!atn) {
+        LOG(LOG_LEVEL_WARN, "Can't find driver %s at slot %u (1)\n",
+            drv, slot);
+        cmd_invalid(sh);
+        return;
+    }
+
+    l = (list_t *)atn->data;
+
+    for (le = list_begin(l); le; le = list_next(l, le)) {
+        sd = (shell_driver_t *)le->data;
+
+        if (sd->name_len != drv_len)
+            continue;
+
+        if ((0 == strncmp(sd->name, drv, drv_len)) &&
+            sd->slot == slot)
+            break;
+    }
+
+    if (!le) {
+        LOG(LOG_LEVEL_WARN, "Can't find driver %s at slot %u (2)\n",
+            drv, slot);
+        cmd_invalid(sh);
+        return;
+    }
+
+    /* TODO find command at fetch its index */
+
+    length_required = sizeof(*pdc) + vector_count(args) * sizeof(*pdca);
+
+    for (idx = 0; idx < vector_count(args); ++idx) {
+        afi = (arg_from_input_t *)vector_get(args, idx);
+        length_required += afi->len;
+    }
+
+    buffer_init(&b, length_required, bp_non_shrinkable);
+
+    pdc = (pr_driver_command_t *)b.data;
+    pdc->s.s = PR_DRV_COMMAND;
+    pdc->cmd_idx = cmd_idx;
+    pdc->argc = vector_count(args);
+    pdca = (pr_driver_command_argument_t *)(pdc + 1);
+
+    for (idx = 0; idx < vector_count(args); ++idx) {
+        afi = (arg_from_input_t *)vector_get(args, idx);
+
+        pdca->len = afi->len;
+        arg_val = (uint8_t *)(pdca + 1);
+        memcpy(arg_val, afi->arg, pdca->len);
+
+        pdc = (pr_driver_command_t *)(arg_val + pdca->len);
+    }
+
+    buffer_deinit(&b);
+
+    unix_socket_client_send(
+        sd->usc, b.data, b.user_size,
+        writer, sh
+    );
 }
 
 void finish_cmd(shell_t *sh) {
@@ -207,6 +296,8 @@ void run_command_from_input(shell_t *sh) {
     char *slot_endptr = NULL;
     unsigned int slot_number;
     vector_t args;
+    arg_from_input_t *afi;
+    size_t arg_len;
 
     line[sh->input_buffer.offset] = '\0';
 
@@ -251,11 +342,24 @@ void run_command_from_input(shell_t *sh) {
         return;
     }
 
-    vector_init(&args, sizeof(token), 0);
+    vector_init(&args, sizeof(*afi), 0);
     token = strtok(NULL, DELIM);
 
     while (token) {
-        *(char **)vector_append(&args) = token;
+        arg_len = strlen(token);
+
+        if (arg_len > 255) {
+            LOG(LOG_LEVEL_WARN, "Too long argument: %s\n",
+                token);
+            vector_deinit(&args);
+            cmd_invalid(sh);
+            return;
+        }
+
+        afi = (arg_from_input_t *)vector_append(&args);
+        afi->arg = token;
+        afi->len = arg_len;
+
         token = strtok(NULL, DELIM);
     }
 
@@ -466,7 +570,9 @@ void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
         return;
     }
 
-    hash = hash_pearson(name, name_len);
+    DRIVER_SLOT_ID(dd.driver_name, dd.driver_name_len, dd.slot_number);
+
+    hash = hash_pearson(ID, ID_len);
 
     atn = avl_tree_add_or_get(&sh->clients, hash, &inserted);
 
@@ -533,7 +639,9 @@ void base_dir_smth_deleted(shell_t *sh, const char *name, size_t name_len) {
         return;
     }
 
-    hash = hash_pearson(name, name_len);
+    DRIVER_SLOT_ID(dd.driver_name, dd.driver_name_len, dd.slot_number);
+
+    hash = hash_pearson(ID, ID_len);
 
     atn = avl_tree_get(&sh->clients, hash);
 
