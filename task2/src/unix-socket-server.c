@@ -35,6 +35,9 @@ void close_connections(avl_tree_node_t *atn) {
 }
 
 void close_connection(uss_connection_t *ussc) {
+    io_service_remove_job(ussc->host->iosvc, ussc->fd, IO_SVC_OP_READ);
+    io_service_remove_job(ussc->host->iosvc, ussc->fd, IO_SVC_OP_WRITE);
+
     buffer_deinit(&ussc->read_task.b);
     buffer_deinit(&ussc->write_task.b);
 
@@ -154,6 +157,8 @@ void data_may_be_read(int fd, io_svc_op_t op, uss_connection_t *ussc) {
 
         if (ussc->read_task.reader)
             ussc->read_task.reader(ussc->host, ussc, err, ussc->read_task.ctx);
+
+        return;
     }
 
     if (bytes_to_read && (errno == EAGAIN || errno == EWOULDBLOCK))
