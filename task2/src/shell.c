@@ -59,7 +59,6 @@ size_t ID_len;                                  \
 ID_len = sprintf(ID, "%.*s%u",                  \
                  name_len, name, slot);
 
-
 typedef struct {
     const char *driver_name;
     size_t driver_name_len;
@@ -980,7 +979,13 @@ void shell_run(shell_t *sh) {
 
     assert(sh);
 
-    chdir(sh->base_path);
+    mkdir(sh->base_path, S_IRUSR | S_IWUSR | S_IXUSR);
+
+    if (chdir(sh->base_path)) {
+        LOG(LOG_LEVEL_WARN, "Can't chdir to %s: %s\n",
+            sh->base_path, strerror(errno));
+        abort();
+    }
 
     wd = inotify_add_watch(sh->inotify_fd, ".",
                            IN_CREATE | IN_DELETE | IN_DELETE_SELF |
