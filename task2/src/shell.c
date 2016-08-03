@@ -269,7 +269,7 @@ void cmd_cmd(shell_t *sh,
              vector_t *args) {
     buffer_t b;
     size_t length_required;
-    pr_driver_command_info_t *pdci;
+    const shell_driver_command_t *sdc;
     pr_driver_command_argument_t *pdca;
     pr_driver_command_t *pdc;
     size_t idx;
@@ -316,9 +316,9 @@ void cmd_cmd(shell_t *sh,
     /* find command at fetch its index */
 
     for (idx = 0; idx < vector_count(&sd->commands); ++idx) {
-        pdci = (pr_driver_command_info_t *)vector_get(&sd->commands, idx);
+        sdc = (const shell_driver_command_t *)vector_get(&sd->commands, idx);
 
-        if (0 == strncmp((const char *)pdci->name, cmd, MAX_COMMAND_NAME_LEN))
+        if (0 == strncmp((const char *)sdc->name, cmd, MAX_COMMAND_NAME_LEN))
             break;
     }
 
@@ -357,12 +357,12 @@ void cmd_cmd(shell_t *sh,
         pdc = (pr_driver_command_t *)(arg_val + pdca->len);
     }
 
-    buffer_deinit(&b);
-
     unix_socket_client_send(
         &sd->usc, b.data, b.user_size,
         (usc_writer_t)writer, sh
     );
+
+    buffer_deinit(&b);
 }
 
 void finish_cmd(shell_t *sh) {
