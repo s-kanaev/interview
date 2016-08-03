@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <dirent.h>
 
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
@@ -102,6 +103,10 @@ static inline
 bool parse_unix_socket_name(shell_t *sh, const char *name, size_t name_len,
                             driver_description_t *dd);
 
+static inline
+bool parse_unix_socket_name_(const char *name, size_t name_len,
+                             driver_description_t *dd);
+
 static
 void connector(usc_t *usc, shell_t *sh);
 
@@ -150,25 +155,14 @@ void print_drv(shell_t *sh, avl_tree_node_t *atn);
 static
 void writer(usc_t *usc, int error, shell_t *sh);
 
+static
+void connect_to_all_existing_sockets(shell_t *sh);
+
+static
+int socket_name_filter(const struct dirent *de);
+
 /********************** private **********************/
-bool check_unix_socket(shell_t *sh, const char *name, size_t name_len) {
-    int rc;
-    struct stat st;
-
-    rc = stat(name, &st);
-
-    if (rc) {
-        LOG(LOG_LEVEL_WARN, "Can't stat %*s: %s\n",
-            name_len, name, strerror(errno));
-        return false;
-    }
-
-    return S_ISSOCK(st.st_mode);
-}
-
-bool parse_unix_socket_name(shell_t *sh,
-                            const char *name, size_t name_len,
-                            driver_description_t *dd) {
+bool parse_unix_socket_name_(const char *name, size_t name_len, driver_description_t *dd) {
     /* path/name.slot.drv */
     size_t back = name_len - 1;
     size_t name_start, name_end;
@@ -205,6 +199,59 @@ bool parse_unix_socket_name(shell_t *sh,
         dd->slot_number);
 
     return true;
+}
+
+int socket_name_filter(const struct dirent *de) {
+    bool ret;
+    driver_description_t dd;
+
+    if (DT_SOCK != de->d_type)
+        return 0;
+
+    return parse_unix_socket_name_(de->d_name, strlen(de->d_name), &dd);
+}
+
+void connect_to_all_existing_sockets(shell_t *sh) {
+    struct dirent **entries = NULL;
+    int number, idx;
+
+    number = scandir(".", &entries,
+                     socket_name_filter, alphasort);
+
+    if (number < 0) {
+        LOG(LOG_LEVEL_FATAL, "Can't scan current directory: %s\n",
+            strerror(errno));
+        abort();
+    }
+
+    for (idx = 0; idx < number; ++idx) {
+        struct dirent *e = entries[idx];
+
+        base_dir_smth_created(sh, e->d_name, strlen(e->d_name));
+    }
+
+    free(entries);
+}
+
+bool check_unix_socket(shell_t *sh, const char *name, size_t name_len) {
+    int rc;
+    struct stat st;
+
+    rc = stat(name, &st);
+
+    if (rc) {
+        LOG(LOG_LEVEL_WARN, "Can't stat %*s: %s\n",
+            name_len, name, strerror(errno));
+        return false;
+    }
+
+    return S_ISSOCK(st.st_mode);
+}
+
+bool parse_unix_socket_name(shell_t *sh,
+                            const char *name, size_t name_len,
+                            driver_description_t *dd) {
+    return parse_unix_socket_name_(name, name_len, dd);
 }
 
 void print_drv(shell_t *sh, avl_tree_node_t *atn) {
@@ -1001,6 +1048,8 @@ void shell_run(shell_t *sh) {
     sh->base_path_watch_descriptor = wd;
 
     sh->running = true;
+
+    connect_to_all_existing_sockets(sh);
 
     fprintf(sh->output, PROMPT);
 

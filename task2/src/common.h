@@ -5,8 +5,8 @@
 
 # include <stddef.h>
 
-# define DIR         "/tmp/driver"
-# define DIR_LEN     (sizeof(DIR) - 1)
+# define BASE_DIR       "/tmp/driver"
+# define BASE_DIR_LEN   (sizeof(BASE_DIR) - 1)
 
 # define MAX_DIGITS  (10)
 
