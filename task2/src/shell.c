@@ -354,7 +354,7 @@ void cmd_cmd(shell_t *sh,
         arg_val = (uint8_t *)(pdca + 1);
         memcpy(arg_val, afi->arg, pdca->len);
 
-        pdc = (pr_driver_command_t *)(arg_val + pdca->len);
+        pdca = (pr_driver_command_argument_t *)(arg_val + pdca->len);
     }
 
     unix_socket_client_send(
