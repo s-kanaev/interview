@@ -219,9 +219,9 @@ bool unix_socket_client_connect_(usc_t *usc,
 void unix_socket_client_disconnect_(usc_t *usc, bool internal) {
     shutdown(usc->fd, SHUT_RDWR);
 
-    if (!internal) {
-        close(usc->fd);
+    close(usc->fd);
 
+    if (!internal) {
         free(usc->connected_to_name);
         usc->connected_to_name = NULL;
         usc->connected_to_name_len = 0;
@@ -325,6 +325,12 @@ bool unix_socket_client_reconnect(usc_t *usc) {
     assert(usc && usc->connected);
 
     unix_socket_client_disconnect_(usc, true);
+
+    usc->fd = allocate_unix_socket(usc->name, usc->name_len);
+
+    if (usc->fd < 0)
+        return false;
+
     return unix_socket_client_connect_(usc,
                                        usc->connected_to_name,
                                        usc->connected_to_name_len,
