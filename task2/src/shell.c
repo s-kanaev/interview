@@ -228,7 +228,7 @@ void print_drv(shell_t *sh, avl_tree_node_t *atn) {
         fprintf(
             sh->output,
             NEW_LINE
-            DRIVER_PRE "%*s" NEW_LINE
+            DRIVER_PRE "%.*s" NEW_LINE
             SLOT_PRE "%u" NEW_LINE,
             sd->name_len, sd->name,
             sd->slot
