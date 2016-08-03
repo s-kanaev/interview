@@ -661,7 +661,7 @@ void purge_clients_list(avl_tree_node_t *atn) {
 
     l = (list_t *)atn->data;
 
-    for (le = list_begin(l); le; list_next(l, le)) {
+    for (le = list_begin(l); le; le = list_next(l, le)) {
         sd = (shell_driver_t *)le->data;
 
         unix_socket_client_deinit(&sd->usc);
