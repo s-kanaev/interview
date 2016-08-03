@@ -172,9 +172,6 @@ bool parse_unix_socket_name(shell_t *sh,
     while (back > 0 && name[back] != '/')
         -- back;
 
-    if (0 == back)
-        return false;
-
     for (name_start = name_end = back;
          name_end < name_len && name[name_end] != '.'; ++name_end);
 
@@ -188,7 +185,7 @@ bool parse_unix_socket_name(shell_t *sh,
     if (slot_end == slot_start || slot_end == name_len || name[slot_end] != '.')
         return false;
 
-    if (name_len - slot_end != name_len - SUFFIX_LEN - 1)
+    if (name_len - slot_end != SUFFIX_LEN + 1)
         return false;
 
     if (strncmp(name + slot_end + 1, SUFFIX, SUFFIX_LEN))
@@ -204,7 +201,6 @@ bool parse_unix_socket_name(shell_t *sh,
 
     return true;
 }
-
 
 void print_drv(shell_t *sh, avl_tree_node_t *atn) {
     shell_driver_t *sd;
@@ -458,11 +454,11 @@ void run_command_from_input(shell_t *sh) {
 void shift_input(shell_t *sh) {
     uint8_t *start = (uint8_t *)sh->input_buffer.data;
 
-    memmove(start, start + sh->input_buffer.offset,
-            sh->input_buffer.user_size - sh->input_buffer.offset);
+    memmove(start, start + sh->input_buffer.offset + 1,
+            sh->input_buffer.user_size - sh->input_buffer.offset - 1);
 
     buffer_realloc(&sh->input_buffer,
-                   sh->input_buffer.user_size - sh->input_buffer.offset);
+                   sh->input_buffer.user_size - sh->input_buffer.offset - 1);
 }
 
 void on_input(int fd, io_svc_op_t op, shell_t *sh) {
@@ -508,6 +504,7 @@ void on_input(int fd, io_svc_op_t op, shell_t *sh) {
     while (detect_newline_on_input(sh)) {
         run_command_from_input(sh);
         shift_input(sh);
+        sh->input_buffer.offset = 0;
     }
 }
 
@@ -714,7 +711,7 @@ void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
 
     l = (list_t *)atn->data;
 
-    if (!inserted)
+    if (inserted)
         list_init(l, true, sizeof(*sd));
 
     for (le = list_begin(l); le; le = list_next(l, le)) {
@@ -820,6 +817,9 @@ ssize_t base_dir_single_event(shell_t *sh, void *base, size_t _offset) {
 
     if (event->len)
         offset += event->len;
+
+    if (event->len)
+        event->len = strlen((const char *)event->name);
 
     if (event->mask & IN_CREATE)
         base_dir_smth_created(sh, event->name, event->len);
