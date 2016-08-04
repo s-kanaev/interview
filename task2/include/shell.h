@@ -44,7 +44,7 @@ struct shell_driver {
 
     unsigned int slot;
 
-    /* vector of pr_driver_command_info_t */
+    /* vector of internal data structures */
     vector_t commands;
 
     usc_t usc;
