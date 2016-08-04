@@ -20,3 +20,10 @@
         - функции хеширования (Пирсон)
         - рабочий цикл на epoll (IO service)
         - таймер, использующий IO service. (timerfd)
+
+    Для сборки используется cmake:
+
+    mkdir build
+    cd build
+    cmake .. && make
+    cd -
