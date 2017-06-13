@@ -93,7 +93,8 @@ public:
      *
      * If reset fails the state of the checker is not changed.
      */
-    bool reset(char opening, char closing);
+    bool reset(char opening = '(',
+               char closing = ')');
 
     /**
      * Validate the block
