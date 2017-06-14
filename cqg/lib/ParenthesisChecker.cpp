@@ -2,10 +2,6 @@
 
 #include <assert.h>
 
-void ParenthesisChecker::Context::newBlock() {
-    position = 0;
-}
-
 ParenthesisChecker::ParenthesisChecker()
 : _opening('('),
   _closing(')'),

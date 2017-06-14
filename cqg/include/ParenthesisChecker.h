@@ -48,8 +48,6 @@ public:
                                         /// indicates that there is this many
                                         /// open brackets
         size_t      position    = 0;    /// position in the last block tested
-
-        void newBlock();
     };
 
 private:
