@@ -1,0 +1,29 @@
+// UTF-8, 0a
+
+Notes on solution.
+
+At the first glance the only fast solution is to employ getline (3) or std::istream::getline()
+functions. Note that both these functions return a * whole * single line per call.
+When I looked at the task for the second time we notice that line size may be literally huge.
+
+Thus, I can't use neither getline(3) not std::istream::getline().
+
+It's very much unlikely that huge amount of data will be typed in by hand.
+I suppose that there will be pipelining and thus standard input stream in form of FILE *
+will be buffered. Therefore I'll read from STDIN_FILENO directly.
+
+It is ok to read the huge line with at most PIPE_BUF bytes at a time due to this
+value represents size of kernel-space buffer for both unnamed pipe (7) and FIFO (7).
+
+Code structure:
+include --- library include files
+lib     --- library sources
+src     --- test executable sources
+
+Modules:
+Buffer              --- a buffer as it states. The unshrinkable one.
+Input               --- reads a file chunk by chunk with line delimiting based on
+                        delimiter provided.
+ParenthesisChecker  --- checks if parenthesis (or any other kind of brackets, if one will wish)
+                        are put ok on the line. Allows to check part of line.
+
