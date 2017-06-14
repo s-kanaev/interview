@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/ioctl.h>
 
 #include <linux/limits.h>
 
@@ -17,7 +16,7 @@ Input::Input(int fd,
              size_t maxBufferSize)
 : _fd(fd),
   _delim(delim),
-  _buffer(maxBufferSize + 1),
+  _buffer(maxBufferSize),
   _maxBufferSize(maxBufferSize)
 {
     *reinterpret_cast<char *>(_buffer.data()) = '\0';
@@ -29,29 +28,43 @@ Input::~Input() {
     /* empty */
 }
 
-bool Input::readUntilNewline(char **line, ssize_t *len) {
+void Input::readUntilNewline(char **line, ssize_t *len) {
     bool result;
 
     do {
         result = readAndDetectNewline(line, len);
-    } while (!result && (len > 0) && line);
+    } while (!result && *line);
+}
 
-    return result;
+void Input::start(char **line, ssize_t *len) {
+    if (_fd < 0) {
+        errno = EBADF;
+        *line = NULL;
+        *len = 0;
+        return;
+    }
+
+    *line = reinterpret_cast<char *>(_buffer.data());
+    *len = 0;
 }
 
 bool Input::readAndDetectNewline(char **line, ssize_t *len) {
     if (_fd < 0) {
+        errno = EBADF;
         *line = NULL;
         *len = 0;
         return false;
     }
 
-    bool newlineDetected = (reinterpret_cast<char *>(_buffer.data()) != _prevNewline);
+    const char *bufferStart = reinterpret_cast<const char *>(_buffer.data());
+    const char *bufferEnd = bufferStart + _buffer.size();
 
-    if (_prevNewline >= (reinterpret_cast<const char *>(_buffer.data()) + _buffer.size()) - 1) {
+    /* read another chunk if required */
+    if (!_prevNewline || (_prevNewline >= bufferEnd)) {
         ssize_t bytesRead = _readAnotherBlock();
 
         if (0 == bytesRead) {
+            /* an eof obviously */
             *line = NULL;
             *len = 0;
             return false;
@@ -62,41 +75,29 @@ bool Input::readAndDetectNewline(char **line, ssize_t *len) {
             *len = -1;
             return false;
         }
-    }
+    }   /* if (_prevNewline >= bufferEnd) { */
 
+    /* check if line break is in the chunk read */
     char *b = _prevNewline;
-    _prevNewline = strchr(b, _delim);
+    _prevNewline = reinterpret_cast<char *>(memchr(b, _delim, _buffer.size()));
 
     *line = b;
 
-    if (newlineDetected) {
-        /* b is the new line start */
-
-        if (_prevNewline) {
-            *len = _prevNewline - b + 1;
-            *_prevNewline = '\0';
-            ++_prevNewline;
-        }
-        else {
-            *len = _buffer.size() - (b - reinterpret_cast<char *>(_buffer.data())) + 1;
-        }
-
-        return true;
-    }
-
-    /* b is not a new line start */
     if (_prevNewline) {
-        *len = _prevNewline - b + 1;
+        /* skip the delimiting character */
+        *len = _prevNewline - b;
         *_prevNewline = '\0';
         ++_prevNewline;
-    }
+    }   /* if (_prevNewline) { */
     else {
-        *len = _buffer.size() - (b - reinterpret_cast<char *>(_buffer.data())) + 1;
+        /* calculate chunk size left since b */
+        *len = _buffer.size() - (b - reinterpret_cast<char *>(_buffer.data()));
 
+        /* instigate another read operation upon subsequent call */
         _prevNewline = reinterpret_cast<char *>(_buffer.data()) + _buffer.size();
-    }
+    }   /* if (_prevNewline) { - else */
 
-    return false;
+    return !!_prevNewline;
 }
 
 ssize_t Input::_readAnotherBlock() {
@@ -105,14 +106,14 @@ ssize_t Input::_readAnotherBlock() {
         return -1;
     }
 
+    errno = 0;
     ssize_t readCount = read(_fd, _buffer.data(), _buffer.size());
 
     if (readCount <= 0) {
         return readCount;
     }
 
-    _buffer.resize(readCount + 1);
-    reinterpret_cast<char *>(_buffer.data())[readCount] = '\0';
+    _buffer.resize(readCount);
 
     _prevNewline = reinterpret_cast<char *>(_buffer.data());
 

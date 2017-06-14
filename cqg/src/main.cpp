@@ -2,7 +2,7 @@
 #include "Input.h"
 
 #include <iostream>
-#include <memory>
+#include <sstream>
 
 #include <unistd.h>
 #include <errno.h>
@@ -13,13 +13,31 @@
 #define RET_NOT_ALL_OK          2
 
 void printStatus(size_t line, bool isValid, const ParenthesisChecker::Context &ctx) {
+    std::stringstream ss;
+
     if (isValid) {
-        std::cout << "Line "
-                  << line
-                  << " ok"
-                  << std::endl;
-        return;
+        ss << "Line "
+           << line
+           << " ok";
     }
+    else {
+        ss << "Failure at line number "
+           << line
+           << " near character number "
+           << ctx.position
+           << " due to ";
+
+        if (ctx.openIndex > 0) {
+            ss << "lack of";
+        }
+        else {
+            ss << "superfluous";
+        }
+
+        ss << " closing bracket";
+    }
+
+    std::cout << ss.str() << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -30,10 +48,24 @@ int main(int argc, char **argv) {
     size_t lineCounter = 1;
     bool allOk = true;
 
-    bool newLineFound = input.readAndDetectNewline(&line, &len);
+    bool newLineFound = false;
     bool stillValid = true;
 
-    while (len > 0 && line) {
+    input.start(&line, &len);
+
+    while (line) {
+        stillValid = checker.validate(line, len);
+        allOk = allOk && stillValid;
+
+        if (!stillValid) {
+            printStatus(lineCounter, stillValid, checker.getContext());
+            input.readUntilNewline(&line, &len);
+
+            checker.reset();
+            ++lineCounter;
+            continue;
+        }
+
         if (newLineFound) {
             stillValid = checker.done();
             allOk = allOk && stillValid;
@@ -43,19 +75,10 @@ int main(int argc, char **argv) {
             ++lineCounter;
         }
 
-        stillValid = checker.validate(line, len);
-        allOk = allOk && stillValid;
-
-        if (!stillValid) {
-            printStatus(lineCounter, stillValid, checker.getContext());
-            newLineFound = input.readUntilNewline(&line, &len);
-            continue;
-        }
-
         newLineFound = input.readAndDetectNewline(&line, &len);
     }
 
-    if (len < 0) {
+    if (!line && errno) {
         std::cerr << "Read error: "
                   << strerror(errno);
 
