@@ -90,7 +90,8 @@ bool Input::readAndDetectNewline(char **line, ssize_t *len) {
 
     /* check if line break is in the chunk read */
     char *b = _prevNewline;
-    char *nl = reinterpret_cast<char *>(memchr(b, _delim, _buffer.size()));
+    size_t sizeLeft = _buffer.size() - (b - reinterpret_cast<char *>(_buffer.data()));
+    char *nl = reinterpret_cast<char *>(memchr(b, _delim, sizeLeft));
 
     *line = b;
 
@@ -103,8 +104,7 @@ bool Input::readAndDetectNewline(char **line, ssize_t *len) {
         ++_prevNewline;
     }   /* if (_prevNewline) { */
     else {
-        /* calculate chunk size left since b */
-        *len = _buffer.size() - (b - reinterpret_cast<char *>(_buffer.data()));
+        *len = sizeLeft;
 
         /* instigate another read operation upon subsequent call */
         _prevNewline = reinterpret_cast<char *>(_buffer.data()) + _buffer.size();
