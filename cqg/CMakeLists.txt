@@ -13,3 +13,4 @@ add_library(checkerlib SHARED ${lib_src})
 add_executable(check-parenthesis ${src})
 target_link_libraries(check-parenthesis checkerlib)
 
+add_subdirectory(test)
