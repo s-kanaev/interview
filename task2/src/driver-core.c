@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include <linux/un.h>
 
@@ -266,6 +267,7 @@ bool driver_core_init_(io_service_t *iosvc,
     offset += SUFFIX_LEN;
     *(path + offset) = '\0';
 
+    core->path = strdup(path);
     core->iosvc = iosvc;
     core->payload = payload;
 
@@ -323,8 +325,14 @@ void driver_core_deinit(driver_core_t *core) {
 
     avl_tree_purge(&core->connection_state);
 
+
     if (core->greeting)
         free(core->greeting);
+
+    if (core->path) {
+        unlink(core->path);
+        free(core->path);
+    }
 }
 
 void driver_core_run(driver_core_t *core) {
