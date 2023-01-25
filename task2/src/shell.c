@@ -14,6 +14,15 @@
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
 
+#define streq(a, b)         (0 == strcmp((a), (b)))
+#define DELIM               " "
+#define LIST_CMD            "list"
+#define HELP_CMD            "help"
+#define CMD_CMD             "cmd"
+
+#define PROMPT              ">"
+#define PROMPT_LEN          (sizeof(PROMPT) - 1)
+
 typedef struct {
     const char *driver_name;
     size_t driver_name_len;
@@ -57,7 +66,146 @@ void reader_info(usc_t *usc, int error, shell_t *sh);
 static
 void reader_response(usc_t *usc, int error, shell_t *sh);
 
+static
+void on_input(int fd, io_svc_op_t op, shell_t *sh);
+
+static inline
+bool detect_newline_on_input(shell_t *sh);
+
+static
+void run_command_from_input(shell_t *sh);
+
+static inline
+void shift_input(shell_t *sh);
+
+static
+void cmd_list(shell_t *sh);
+
+static
+void cmd_help(shell_t *sh);
+
+static
+void cmd_invalid(shell_t *sh);
+
+static
+void cmd_cmd(shell_t *sh,
+             const char *drv,
+             const char *slot,
+             const char *cmd,
+             vector_t *args);
+
+static inline
+void finish_cmd(shell_t *sh);
+
 /********************** private **********************/
+void cmd_list(shell_t *sh) {
+    /* TODO list all drivers with slots */
+    finish_cmd(sh);
+}
+
+void cmd_help(shell_t *sh) {
+    /* TODO print help */
+    finish_cmd(sh);
+}
+
+void cmd_invalid(shell_t *sh) {
+    /* TODO */
+    finish_cmd(sh);
+}
+
+void cmd_cmd(shell_t *sh,
+             const char *drv, const char *slot, const char *cmd,
+             vector_t *args) {
+    /* TODO */
+}
+
+void finish_cmd(shell_t *sh) {
+    write(sh->output_fd, PROMPT, PROMPT_LEN);
+}
+
+bool detect_newline_on_input(shell_t *sh) {
+    if (sh->input_buffer.user_size == 0)
+        return false;
+
+    while (sh->input_buffer.offset < sh->input_buffer.user_size) {
+        if ('\n' == ((char *)sh->input_buffer.data)[sh->input_buffer.offset])
+            return true;
+
+        ++sh->input_buffer.offset;
+    }
+
+    return false;
+}
+
+void run_command_from_input(shell_t *sh) {
+    char *line = (char *)sh->input_buffer.data;
+    char *token;
+    char *cmd, *drv, *slot, *drv_cmd;
+
+    line[sh->input_buffer.offset] = '\0';
+
+    cmd = strtok(line, DELIM);
+
+    if (!cmd) {
+        LOG_MSG(LOG_LEVEL_WARN, "Invalid input: no command\n");
+        return;
+    }
+
+    if (streq(LIST_CMD, cmd)) {
+        cmd_list(sh);
+        return;
+    }
+    else if (streq(HELP_CMD, cmd)) {
+        cmd_help(sh);
+        return;
+    }
+    else if (!streq(CMD_CMD, cmd)) {
+        cmd_invalid(sh);
+        return;
+    }
+
+    drv = strtok(NULL, DELIM);
+    slot = strtok(NULL, DELIM);
+    drv_cmd = strtok(NULL, DELIM);
+
+
+
+
+    /* TODO tokenize the string */
+
+    return;
+}
+
+void shift_input(shell_t *sh) {
+    uint8_t *start = (uint8_t *)sh->input_buffer.data;
+
+    memmove(start, start + sh->input_buffer.offset,
+            sh->input_buffer.user_size - sh->input_buffer.offset);
+
+    buffer_realloc(&sh->input_buffer,
+                   sh->input_buffer.user_size - sh->input_buffer.offset);
+}
+
+void on_input(int fd, io_svc_op_t op, shell_t *sh) {
+    int pending;
+    int rc;
+
+    rc = ioctl(fd, FIONREAD, &pending);
+
+    if (rc < 0) {
+        LOG(LOG_LEVEL_FATAL, "Can't ioctl(FIONREAD) on input FD: %s\n",
+            strerror(errno));
+        abort();
+    }
+
+    buffer_realloc(&sh->input_buffer, sh->input_buffer.user_size + pending);
+
+    while (detect_newline_on_input(sh)) {
+        run_command_from_input(sh);
+        shift_input(sh);
+    }
+}
+
 #define READ_ERROR_HANDLER                                                      \
 do {                                                                            \
     if (error) {                                                                \
@@ -172,7 +320,7 @@ static
 void purge_clients_list(avl_tree_node_t *atn) {
     list_t *l;
     list_element_t *le;
-    usc_t *usc;
+    shell_driver_t *sd;
 
     if (!atn)
         return;
@@ -183,9 +331,10 @@ void purge_clients_list(avl_tree_node_t *atn) {
     l = (list_t *)atn->data;
 
     for (le = list_begin(l); le; list_next(l, le)) {
-        usc = (usc_t *)le->data;
+        sd = (shell_driver_t *)le->data;
 
-        unix_socket_client_deinit(usc);
+        unix_socket_client_deinit(&sd->usc);
+        free(sd->name);
     }
 
     list_purge(l);
@@ -205,7 +354,7 @@ void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
     avl_tree_node_t *atn;
     list_t *l;
     list_element_t *le;
-    usc_t *usc;
+    shell_driver_t *sd;
     bool inserted = false;
 
     LOG(LOG_LEVEL_DEBUG, "Created: %*s\n",
@@ -230,15 +379,16 @@ void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
     l = (list_t *)atn->data;
 
     if (!inserted)
-        list_init(l, true, sizeof(*usc));
+        list_init(l, true, sizeof(*sd));
 
     for (le = list_begin(l); le; le = list_next(l, le)) {
-        usc = (usc_t *)le->data;
+        sd = (shell_driver_t *)le->data;
 
-        if (usc->connected_to_name_len != name_len)
+        if (sd->name_len != dd.driver_name_len)
             continue;
 
-        if (0 == strncmp(usc->connected_to_name, name, name_len))
+        if ((0 == strncmp(sd->name, dd.driver_name, name_len)) &&
+            sd->slot == dd.slot_number)
             break;
     }
 
@@ -249,17 +399,22 @@ void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
     }
 
     le = list_append(l);
-    usc = (usc_t *)le->data;
+    sd = (shell_driver_t *)le->data;
 
-    if (!unix_socket_client_init(usc, NULL, 0, sh->iosvc)) {
+    if (!unix_socket_client_init(&sd->usc, NULL, 0, sh->iosvc)) {
         LOG(LOG_LEVEL_FATAL,
             "Can't initialize UNIX socket client for %*s: %s\n",
             name_len, name, strerror(errno));
         abort();
     }
 
+    sd->name = (char *)malloc(dd.driver_name_len);
+    memcpy(sd->name, dd.driver_name, dd.driver_name_len);
+    sd->name_len = dd.driver_name_len;
+    sd->slot = dd.slot_number;
+
     if (!unix_socket_client_connect(
-        usc, name, name_len,
+        &sd->usc, name, name_len,
         (usc_connector_t)connector, sh))
         LOG(LOG_LEVEL_FATAL, "Can't connect to %*s: %s\n",
             name_len, name, strerror(errno));
@@ -271,7 +426,7 @@ void base_dir_smth_deleted(shell_t *sh, const char *name, size_t name_len) {
     avl_tree_node_t *atn;
     list_t *l;
     list_element_t *le;
-    usc_t *usc;
+    shell_driver_t *sd;
 
     LOG(LOG_LEVEL_DEBUG, "Deleted: %*s\n",
         name_len, name);
@@ -295,12 +450,13 @@ void base_dir_smth_deleted(shell_t *sh, const char *name, size_t name_len) {
     l = (list_t *)atn->data;
 
     for (le = list_begin(l); le; le = list_next(l, le)) {
-        usc = (usc_t *)le->data;
+        sd = (shell_driver_t *)le->data;
 
-        if (usc->connected_to_name_len != name_len)
+        if (sd->name_len != dd.driver_name_len)
             continue;
 
-        if (name_len && (0 == strncmp(usc->connected_to_name, name, name_len)))
+        if ((0 == strncmp(sd->name, dd.driver_name, name_len)) &&
+            sd->slot == dd.slot_number)
             break;
     }
 
@@ -310,7 +466,8 @@ void base_dir_smth_deleted(shell_t *sh, const char *name, size_t name_len) {
         return;
     }
 
-    unix_socket_client_deinit(usc);
+    unix_socket_client_deinit(&sd->usc);
+    free(sd->name);
 
     list_remove_and_advance(l, le);
 }
@@ -396,7 +553,7 @@ void base_dir_event(int fd, io_svc_op_t op, shell_t *sh) {
 /********************** API **********************/
 bool shell_init(shell_t *sh,
                 const char *base_path, size_t base_path_len,
-                io_service_t *iosvc) {
+                io_service_t *iosvc, int input_fd, int output_fd) {
     bool ret;
 
     assert(sh && iosvc && (!base_path_len || (base_path && base_path_len)));
@@ -427,6 +584,11 @@ bool shell_init(shell_t *sh,
 
     sh->running = false;
 
+    buffer_init(&sh->input_buffer, 0, bp_non_shrinkable);
+
+    sh->input_fd = input_fd;
+    sh->output_fd = output_fd;
+
     return true;
 }
 
@@ -441,6 +603,8 @@ void shell_deinit(shell_t *sh) {
     purge_clients_list(sh->clients.root);
 
     free(sh->base_path);
+
+    buffer_deinit(&sh->input_buffer);
 }
 
 void shell_run(shell_t *sh) {
@@ -466,6 +630,11 @@ void shell_run(shell_t *sh) {
     io_service_post_job(sh->iosvc, sh->inotify_fd,
                         IO_SVC_OP_READ, !IOSVC_JOB_ONESHOT,
                         (iosvc_job_function_t)base_dir_event,
+                        sh);
+
+    io_service_post_job(sh->iosvc, sh->input_fd,
+                        IO_SVC_OP_READ, !IOSVC_JOB_ONESHOT,
+                        (iosvc_job_function_t)on_input,
                         sh);
 
     io_service_run(sh->iosvc);
