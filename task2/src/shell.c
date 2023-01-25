@@ -204,6 +204,8 @@ bool parse_unix_socket_name(shell_t *sh,
 
 void print_drv(shell_t *sh, avl_tree_node_t *atn) {
     shell_driver_t *sd;
+    list_t *l;
+    list_element_t *le;
     size_t idx;
 
     if (!atn)
@@ -212,27 +214,32 @@ void print_drv(shell_t *sh, avl_tree_node_t *atn) {
     print_drv(sh, atn->left);
     print_drv(sh, atn->right);
 
-    sd = (shell_driver_t *)atn->data;
+    l = (list_t *)atn->data;
 
-    fprintf(
-        sh->output,
-        DRIVER_PRE "%*s" NEW_LINE
-        SLOT_PRE "%u" NEW_LINE
-        DRIVER_POST,
-        sd->name_len, sd->name,
-        sd->slot
-    );
-    for (idx = 0; idx < vector_count(&sd->commands); ++idx) {
-        const pr_driver_command_info_t *dci =
-            (const pr_driver_command_info_t *)vector_get(&sd->commands, idx);
+    for (le = list_begin(l); le; le = list_next(l, le)) {
+        sd = (shell_driver_t *)le->data;
 
         fprintf(
             sh->output,
-            "%*s <arity: %u> --- %*s" NEW_LINE,
-            MAX_COMMAND_NAME_LEN, dci->name,
-            dci->arity,
-            MAX_COMMAND_DESCRIPTION_LEN, dci->descr
+            DRIVER_PRE "%*s" NEW_LINE
+            SLOT_PRE "%u" NEW_LINE
+            DRIVER_POST,
+            sd->name_len, sd->name,
+            sd->slot
         );
+
+        for (idx = 0; idx < vector_count(&sd->commands); ++idx) {
+            const pr_driver_command_info_t *dci =
+                (const pr_driver_command_info_t *)vector_get(&sd->commands, idx);
+
+            fprintf(
+                sh->output,
+                "%*s <arity: %u> --- %*s" NEW_LINE,
+                MAX_COMMAND_NAME_LEN, dci->name,
+                (unsigned int)dci->arity,
+                MAX_COMMAND_DESCRIPTION_LEN, dci->descr
+            );
+        }
     }
 }
 
@@ -609,6 +616,8 @@ void reader_signature(usc_t *usc, int error, shell_t *sh) {
     const pr_signature_t *s = (const pr_signature_t *)usc->read_task.b.data;
 
     READ_ERROR_HANDLER;
+
+    usc->read_task.b.offset = sizeof(*s);
 
     switch (s->s) {
         case PR_DRV_INFO:
