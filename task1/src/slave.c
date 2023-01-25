@@ -78,9 +78,8 @@ slave_actor_t *ACTORS[] = {
 
 /**************** private ****************/
 void slave_memorize(slave_t *sl, const pr_msg_t *msg) {
-    LOG(
-        LOG_LEVEL_INFO,
-        "Text: %s\nTemperature: %d\nBrightness: %u\nDate/time: %ld\n",
+    LOG(LOG_LEVEL_INFO,
+        "Memorize:\nText: %s\nTemperature: %d\nBrightness: %u\nDate/time: %ld\n",
         (char *)msg->text,
         (int)msg->avg_temperature,
         (int)msg->brightness,
@@ -306,10 +305,10 @@ void slave_finish_master_polling(slave_t *sl, slave_state_t new_state) {
 void slave_act(slave_t *sl, const pr_signature_t *packet, int fd,
                const struct sockaddr_in *remote_addr) {
     LOG(LOG_LEVEL_DEBUG,
-        "Acting within state %#02x for signature: %#02x, from: %#08x\n",
+        "Acting within state %#02x for signature: %#02x, from: %s\n",
         (int)sl->state,
         (int)packet->s,
-        (unsigned int)remote_addr->sin_addr.s_addr);
+        inet_ntoa(remote_addr->sin_addr));
     ACTORS[sl->state](sl, packet, fd, remote_addr);
 }
 

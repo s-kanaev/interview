@@ -81,6 +81,12 @@ master_update_slave(master_t *m,
     avl_tree_node_t *atn = avl_tree_get(&m->slaves, ip);
     slave_description_t *atn_sd;
 
+    LOG(LOG_LEVEL_DEBUG,
+        "Slave: ID = %u, T = %d, IL = %u\n",
+        (unsigned int)ip,
+        (int)sd->temperature,
+        (unsigned int)sd->illumination);
+
     if (!atn) {
         atn = avl_tree_add(&m->slaves, ip);
         atn_sd = (slave_description_t *)atn->data;
@@ -110,6 +116,11 @@ master_calculate_averages(master_t *m) {
                           ? m->sum.illumination / m->slaves.count
                           : 0;
 
+    LOG(LOG_LEVEL_DEBUG,
+        "Averages: T = %d, IL = %u\n",
+        (int)m->avg.temperature,
+        (unsigned int)m->avg.illumination);
+
     return !((prev_temperature == m->avg.temperature) &&
              (prev_illumination == m->avg.illumination));
 }
@@ -129,6 +140,11 @@ master_act(master_t *m, const pr_signature_t *packet, int fd,
     slave_description_t sd;
     uint8_t brightness;
     bool avg_changed = false;
+
+    LOG(LOG_LEVEL_DEBUG,
+        "Master acting for signature: %#02x, from: %s\n",
+        (int)packet->s,
+        inet_ntoa(remote_addr->sin_addr));
 
     switch (packet->s) {
         case PR_RESPONSE:
