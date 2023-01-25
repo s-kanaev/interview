@@ -99,7 +99,7 @@ void io_service_post_job(io_service_t *iosvc,
                 break;
         }
 
-        if (!lje) {
+        if (!le) {
             le = list_append(&iosvc->lookup_table);
             lje = (lookup_job_element_t *)le->data;
 
@@ -215,7 +215,7 @@ void io_service_run(io_service_t *iosvc) {
                 }
             }
 
-            if (lje) {
+            if (le) {
                 job = lje->job[op].job;
                 ctx = lje->job[op].ctx;
 
