@@ -72,6 +72,12 @@ typedef struct {
     uint8_t len;
 } arg_from_input_t;
 
+typedef struct {
+    uint8_t name[MAX_COMMAND_NAME_LEN + 1];
+    uint8_t arity;
+    uint8_t descr[MAX_COMMAND_DESCRIPTION_LEN + 1];
+} shell_driver_command_t;
+
 static
 void purge_clients_list(avl_tree_node_t *atn);
 
@@ -221,23 +227,23 @@ void print_drv(shell_t *sh, avl_tree_node_t *atn) {
 
         fprintf(
             sh->output,
+            NEW_LINE
             DRIVER_PRE "%*s" NEW_LINE
-            SLOT_PRE "%u" NEW_LINE
-            DRIVER_POST,
+            SLOT_PRE "%u" NEW_LINE,
             sd->name_len, sd->name,
             sd->slot
         );
 
         for (idx = 0; idx < vector_count(&sd->commands); ++idx) {
-            const pr_driver_command_info_t *dci =
-                (const pr_driver_command_info_t *)vector_get(&sd->commands, idx);
+            const shell_driver_command_t *sdc =
+                (const shell_driver_command_t *)vector_get(&sd->commands, idx);
 
             fprintf(
                 sh->output,
-                "%*s <arity: %u> --- %*s" NEW_LINE,
-                MAX_COMMAND_NAME_LEN, dci->name,
-                (unsigned int)dci->arity,
-                MAX_COMMAND_DESCRIPTION_LEN, dci->descr
+                "%s <arity: %u> --- %s" NEW_LINE,
+                sdc->name,
+                (unsigned int)sdc->arity,
+                sdc->descr
             );
         }
     }
@@ -565,7 +571,9 @@ do {                                                                            
 
 void reader_info(usc_t *usc, int error, shell_t *sh) {
     size_t required_length;
+    size_t idx;
     shell_driver_t *sd;
+    shell_driver_command_t *sdc;
     const pr_driver_command_info_t *dci;
     const pr_driver_info_t *di = (const pr_driver_info_t *)usc->read_task.b.data;
 
@@ -585,8 +593,17 @@ void reader_info(usc_t *usc, int error, shell_t *sh) {
     }
 
     sd = (shell_driver_t *)usc->priv;
-    vector_init(&sd->commands, sizeof(*dci), di->commands_number);
-    memcpy(sd->commands.data.data, di + 1, sizeof(*dci) * di->commands_number);
+    dci = (const pr_driver_command_info_t *)(di + 1);
+    vector_init(&sd->commands, sizeof(*sdc), di->commands_number);
+    for (idx = 0; idx < di->commands_number; ++idx, ++dci) {
+        sdc = (shell_driver_command_t *)vector_get(&sd->commands, idx);
+
+        memcpy(sdc->name, dci->name, MAX_COMMAND_NAME_LEN);
+        sdc->name[MAX_COMMAND_NAME_LEN] = '\0';
+        memcpy(sdc->descr, dci->descr, MAX_COMMAND_DESCRIPTION_LEN);
+        sdc->descr[MAX_COMMAND_DESCRIPTION_LEN] = '\0';
+        sdc->arity = dci->arity;
+    }
 }
 
 void reader_response(usc_t *usc, int error, shell_t *sh) {
