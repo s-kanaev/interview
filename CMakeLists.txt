@@ -18,7 +18,7 @@ include_directories(${CPPNETLIB_INCLUDE_DIRS})
 
 aux_source_directory(src SRCS)
 
-set(NEED_BOOST_LIBS boost_system-mt boost_thread-mt boost_date_time-mt boost_program_options-mt)
+set(NEED_BOOST_LIBS boost_system-mt boost_thread-mt)
 
 add_library(server STATIC ${SRCS})
 target_link_libraries(server pthread rt ${libpqxx_LDFLAGS} ${NEED_BOOST_LIBS} ${CPPNETLIB_LIBRARIES})
