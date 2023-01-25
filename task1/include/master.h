@@ -34,7 +34,7 @@ struct master {
     /** slaves' lookup tree */
     avl_tree_t slaves;
 
-    struct sockaddr local_addr;
+    struct sockaddr_storage local_addr;
     struct sockaddr bcast_addr;
     int udp_socket;
 };

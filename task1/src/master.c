@@ -20,15 +20,59 @@ void timeout(master_t *m) {
     pr_request_t request;
     request.s.s = PR_REQUEST;
 
-    /* TODO send request */
+    sendto(m->udp_socket, &request, sizeof(request), 0,
+           &m->bcast_addr, sizeof(m->bcast_addr));
 }
 
 static
 void data_received(int fd, io_svc_op_t op, master_t *m) {
     pr_signature_t *packet = NULL;
+    int pending;
+    int ret;
+    ssize_t bytes_read;
+    ssize_t buf_size;
+    uint8_t buffer[PR_MAX_SIZE];
+    struct sockaddr_storage remote_addr;
+    socklen_t remote_addr_len;
 
-    /* TODO peek, read and parse datagram, ignore if invalid */
+    /* peek */
+    ret = ioctl(fd, FIONREAD, &pending);
+    assert(0 == ret);
 
+    if (pending > PR_MAX_SIZE || pending < PR_MIN_SIZE) {
+        /* discard this datagram */
+        /* read big chunks */
+        while (pending >= PR_MAX_SIZE) {
+            bytes_read = recv(fd, buffer, PR_MAX_SIZE, 0);
+            assert(bytes_read > 0);
+
+            pending -= bytes_read;
+        }
+
+        /* red the rest */
+        while (pending) {
+            bytes_read = recv(fd, buffer, pending, 0);
+            assert(bytes_read > 0);
+
+            pending -= bytes_read;
+        }
+
+        return;
+    }
+
+    /* read datagram */
+    buf_size = 0;
+    while (pending) {
+        bytes_read = recvfrom(fd, (uint8_t *)(buffer) + buf_size, pending, 0,
+                              (struct sockaddr *)&remote_addr, &remote_addr_len);
+        assert(bytes_read >= 0);
+
+        pending -= bytes_read;
+        buf_size += bytes_read;
+    }
+
+    /* parse and act */
+    packet = (pr_signature_t *)buffer;
     master_act(m, packet, fd);
 }
 
@@ -121,6 +165,11 @@ master_act(master_t *m, const pr_signature_t *packet, int fd) {
     }
 }
 
+void
+master_set_broadcast_addr(master_t *m, struct sockaddr *bcast_addr) {
+    memcpy(&m->bcast_addr, bcast_addr, sizeof(m->bcast_addr));
+}
+
 /**************** public API ****************/
 void master_init(master_t *m, io_service_t *iosvc,
                  const char *local_addr) {
@@ -182,7 +231,7 @@ void master_init(master_t *m, io_service_t *iosvc,
     ret = ioctl(m->udp_socket, SIOCGIFBRDADDR, &ifreq);
 
     assert(0 == ret);
-    memcpy(&m->bcast_addr, &(ifreq.ifr_broadaddr), sizeof(m->bcast_addr));
+    master_set_broadcast_addr(m, &(ifreq.ifr_broadaddr));
 }
 
 void master_deinit(master_t *m) {
