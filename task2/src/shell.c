@@ -326,6 +326,7 @@ void cmd_cmd(shell_t *sh,
     list_t *l;
     list_element_t *le;
     shell_driver_t *sd;
+    size_t cmd_arity;
     size_t cmd_idx;
     size_t drv_len = strlen(drv);
 
@@ -364,8 +365,10 @@ void cmd_cmd(shell_t *sh,
     for (idx = 0; idx < vector_count(&sd->commands); ++idx) {
         sdc = (const shell_driver_command_t *)vector_get(&sd->commands, idx);
 
-        if (0 == strncmp((const char *)sdc->name, cmd, MAX_COMMAND_NAME_LEN))
+        if (0 == strncmp((const char *)sdc->name, cmd, MAX_COMMAND_NAME_LEN)) {
+            cmd_arity = sdc->arity;
             break;
+        }
     }
 
     if (vector_count(&sd->commands) == idx) {
@@ -377,6 +380,12 @@ void cmd_cmd(shell_t *sh,
     }
 
     cmd_idx = idx;
+
+    if (cmd_arity < vector_count(args)) {
+        LOG_MSG(LOG_LEVEL_WARN, "Too many arguments for the command supplied\n");
+        cmd_invalid(sh);
+        return;
+    }
 
     length_required = sizeof(*pdc) + vector_count(args) * sizeof(*pdca);
 
