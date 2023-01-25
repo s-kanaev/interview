@@ -40,23 +40,24 @@ void one_o1(int idx,
             const char *name, size_t name_len,
             int argc, driver_command_argument_t *argv,
             buffer_t *response) {
+    size_t old_size = response->user_size;
     switch (argc) {
         case 0:
 #define MSG "O1 without any arguments"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 1:
 #define MSG "O1 with single argument"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         default:
 #define MSG "O1 fails"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
     }
@@ -66,35 +67,36 @@ void one_o2(int idx,
             const char *name, size_t name_len,
             int argc, driver_command_argument_t *argv,
             buffer_t *response) {
+    size_t old_size = response->user_size;
     switch (argc) {
         case 0:
 #define MSG "O2 without any arguments"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 1:
 #define MSG "O2 with single argument"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 2:
 #define MSG "O2 with two arguments"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 3:
 #define MSG "O2 with even three arguments!"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         default:
 #define MSG "O2 fails"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
     }
@@ -104,35 +106,36 @@ void one_o3(int idx,
             const char *name, size_t name_len,
             int argc, driver_command_argument_t *argv,
             buffer_t *response) {
+    size_t old_size = response->user_size;
     switch (argc) {
         case 0:
 #define MSG "O3 without any arguments"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 1:
 #define MSG "O3 with single argument"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 2:
 #define MSG "O3 with two arguments"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 3:
 #define MSG "O3 with even three arguments!"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         default:
 #define MSG "O3 fails"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
     }
@@ -142,35 +145,36 @@ void two_t1(int idx,
             const char *name, size_t name_len,
             int argc, driver_command_argument_t *argv,
             buffer_t *response) {
+    size_t old_size = response->user_size;
     switch (argc) {
         case 0:
 #define MSG "T1 without any arguments"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 1:
 #define MSG "T1 with single argument"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 2:
 #define MSG "T1 with two arguments"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 3:
 #define MSG "T1 with even three arguments!"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         default:
 #define MSG "T1 fails"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
     }
@@ -180,23 +184,24 @@ void two_t2(int idx,
             const char *name, size_t name_len,
             int argc, driver_command_argument_t *argv,
             buffer_t *response) {
+    size_t old_size = response->user_size;
     switch (argc) {
         case 0:
 #define MSG "T2 without any arguments"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         case 1:
 #define MSG "T2 with single argument"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
         default:
 #define MSG "O3 fails"
-            buffer_realloc(response, sizeof(MSG) - 1);
-            memcpy(response->data, MSG, sizeof(MSG) - 1);
+            buffer_realloc(response, old_size + sizeof(MSG) - 1);
+            memcpy(response->data + old_size, MSG, sizeof(MSG) - 1);
 #undef MSG
             break;
     }

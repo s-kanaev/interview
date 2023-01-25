@@ -34,6 +34,7 @@ bool driver_core_init_(io_service_t *iosvc,
 void reader(uss_t *srv, uss_connection_t *conn,
             int error, driver_core_t *core) {
     const pr_signature_t *s;
+    pr_driver_response_t *response_header;
     const pr_driver_command_t *dc;
     const pr_driver_command_argument_t *dca;
     const uint8_t *dca_value;
@@ -100,10 +101,21 @@ void reader(uss_t *srv, uss_connection_t *conn,
     if (!argc) {
         LOG(LOG_LEVEL_DEBUG, "Calling %*s with no arguments\n",
             comm->name_len, comm->name);
-        buffer_init(&response, 0, bp_non_shrinkable);
+        buffer_init(&response, sizeof(*response_header), bp_non_shrinkable);
         comm->handler(cmd_idx,
                       comm->name, comm->name_len,
                       argc, NULL, &response);
+
+        if (response.user_size < sizeof(*response_header)) {
+            LOG_MSG(LOG_LEVEL_FATAL,
+                    "Comand handler malforms response buffer\n");
+            abort();
+        }
+
+        response_header = (pr_driver_response_t *)response.data;
+        response_header->s.s = PR_DRV_RESPONSE;
+        response_header->len = response.user_size - sizeof(*response_header);
+
         unix_socket_server_send(srv, conn, response.data, response.user_size,
                                 (uss_writer_t)writer, core);
         buffer_deinit(&response);
@@ -172,10 +184,21 @@ void reader(uss_t *srv, uss_connection_t *conn,
             (const uint8_t *)(dca + 1) + dca->len);
     }
 
-    buffer_init(&response, 0, bp_non_shrinkable);
+    buffer_init(&response, sizeof(*response_header), bp_non_shrinkable);
     comm->handler(cmd_idx,
                   comm->name, comm->name_len,
                   state->argc, argv, &response);
+
+    if (response.user_size < sizeof(*response_header)) {
+        LOG_MSG(LOG_LEVEL_FATAL,
+                "Comand handler malforms response buffer\n");
+        abort();
+    }
+
+    response_header = (pr_driver_response_t *)response.data;
+    response_header->s.s = PR_DRV_RESPONSE;
+    response_header->len = response.user_size - sizeof(*response_header);
+
     unix_socket_server_send(srv, conn, response.data, response.user_size,
                             (uss_writer_t)writer, core);
     buffer_deinit(&response);
