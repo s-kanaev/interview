@@ -625,7 +625,7 @@ void reader_response(usc_t *usc, int error, shell_t *sh) {
         return;
     }
 
-    fprintf(sh->output, "%*s" NEW_LINE, dr->len, (const char *)(dr + 1));
+    fprintf(sh->output, "%.*s" NEW_LINE, dr->len, (const char *)(dr + 1));
     finish_cmd(sh);
 }
 
