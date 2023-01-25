@@ -13,7 +13,8 @@ struct sockaddr;
  * \return socket FD or \c -1 on failure
  */
 int allocate_udp_broadcasting_socket(const char *iface,
-                                     uint16_t local_port);
+                                     uint16_t local_port,
+                                     struct sockaddr *local_addr);
 
 /**
  * Fetch broadcast address

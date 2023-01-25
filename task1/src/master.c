@@ -118,7 +118,6 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
 /**************** API ****************/
 void master_init(master_t *m, io_service_t *iosvc,
                  const char *iface) {
-    struct addrinfo addr;
     struct sockaddr brcast_addr;
 
     assert(m && iosvc && iface);
@@ -126,7 +125,8 @@ void master_init(master_t *m, io_service_t *iosvc,
     master_init_(m, iosvc);
 
     /* find suitable local address */
-    m->udp_socket = allocate_udp_broadcasting_socket(iface, UDP_PORT);
+    m->udp_socket = allocate_udp_broadcasting_socket(
+        iface, UDP_PORT, &m->local_addr);
 
     if (m->udp_socket < 0) {
         LOG(LOG_LEVEL_FATAL,
@@ -135,8 +135,6 @@ void master_init(master_t *m, io_service_t *iosvc,
 
         abort();
     }
-
-    memcpy(&m->local_addr, &addr.ai_addr, sizeof(addr.ai_addrlen));
 
     /* fetch broadcast addr */
     if (0 > fetch_broadcast_addr(m->udp_socket, iface, &brcast_addr)) {
