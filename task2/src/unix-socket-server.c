@@ -35,6 +35,9 @@ void close_connections(avl_tree_node_t *atn) {
 }
 
 void close_connection(uss_connection_t *ussc) {
+    buffer_deinit(&ussc->read_task.b);
+    buffer_deinit(&ussc->read_task.b);
+
     shutdown(ussc->fd, SHUT_RDWR);
     close(ussc->fd);
 }
@@ -63,26 +66,33 @@ void acceptor(int fd, io_svc_op_t op, uss_t *srv) {
 
     ussc->host = srv;
     ussc->fd = fd;
+    ussc->eof = false;
+    buffer_init(&ussc->read_task.b, 0, bp_non_shrinkable);
+    buffer_init(&ussc->write_task.b, 0, bp_non_shrinkable);
 
-    if (srv->acceptor)
-        srv->acceptor(srv, ussc, srv->acceptor_ctx);
+    if (srv->acceptor &&
+        !srv->acceptor(srv, ussc, srv->acceptor_ctx))
+        unix_socket_server_close_connection(srv, ussc);
 }
 
 void data_may_be_sent(int fd, io_svc_op_t op, uss_connection_t *ussc) {
     size_t bytes_wrote = ussc->write_task.currently_wrote;
-    size_t bytes_to_write = ussc->write_task.total - bytes_wrote;
+    size_t bytes_to_write = ussc->write_task.b.user_size - bytes_wrote;
     ssize_t current_write;
     int err;
 
+    errno = 0;
     while (bytes_to_write) {
         current_write = send(ussc->fd,
-                             ussc->write_task.d + bytes_wrote,
+                             ussc->write_task.b.data + bytes_wrote,
                              bytes_to_write,
                              MSG_DONTWAIT | MSG_NOSIGNAL);
 
         if (current_write < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
+                errno = 0;
                 continue;
+            }
             else
                 break;
         }
@@ -106,22 +116,30 @@ void data_may_be_sent(int fd, io_svc_op_t op, uss_connection_t *ussc) {
 
 void data_may_be_read(int fd, io_svc_op_t op, uss_connection_t *ussc) {
     size_t bytes_read = ussc->read_task.currently_read;
-    size_t bytes_to_read = ussc->read_task.waiting - bytes_read;
+    size_t bytes_to_read = ussc->read_task.b.user_size - bytes_read;
     ssize_t current_read;
+    bool eof = false;
     int err;
 
-    while (bytes_to_read) {
+    errno = 0;
+    while (bytes_to_read && !eof) {
         current_read = recv(ussc->fd,
-                            ussc->read_task.d + bytes_read,
+                            ussc->read_task.b.data
+                                + ussc->read_task.b.offset + bytes_read,
                             bytes_to_read,
                             MSG_DONTWAIT | MSG_NOSIGNAL);
 
         if (current_read < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
+                errno = 0;
                 continue;
+            }
             else
                 break;
         }
+
+        if (current_read == 0) /* EOF */
+            eof = true;
 
         bytes_read += current_read;
         bytes_to_read -= current_read;
@@ -130,6 +148,14 @@ void data_may_be_read(int fd, io_svc_op_t op, uss_connection_t *ussc) {
     ussc->read_task.currently_read = bytes_read;
 
     err = errno;
+
+    ussc->eof = eof;
+    if (eof) {
+        io_service_remove_job(ussc->host->iosvc, IO_SVC_OP_READ, fd);
+
+        if (ussc->read_task.reader)
+            ussc->read_task.reader(ussc->host, ussc, err, ussc->read_task.ctx);
+    }
 
     if (bytes_to_read && (errno == EAGAIN || errno == EWOULDBLOCK))
         return;
@@ -202,8 +228,8 @@ void unix_socket_server_send(uss_t *srv, uss_connection_t *conn,
     assert(srv && conn);
 
     memset(&(conn->write_task), 0, sizeof(conn->write_task));
-    conn->write_task.d = d;
-    conn->write_task.total = sz;
+    buffer_realloc(&conn->write_task.b, sz);
+    memcpy(conn->write_task.b.data, d, sz);
     conn->write_task.writer = writer;
     conn->write_task.ctx = ctx;
 
@@ -215,13 +241,13 @@ void unix_socket_server_send(uss_t *srv, uss_connection_t *conn,
 }
 
 void unix_socket_server_recv(uss_t *srv, uss_connection_t *conn,
-                             void *d, size_t sz,
+                             size_t sz,
                              uss_reader_t reader, void *ctx) {
     assert(srv && conn);
 
     memset(&(conn->read_task), 0, sizeof(conn->read_task));
-    conn->read_task.d = d;
-    conn->read_task.waiting = sz;
+    conn->read_task.b.offset = conn->read_task.b.user_size;
+    buffer_realloc(&conn->read_task.b, conn->read_task.b.offset + sz);
     conn->read_task.reader = reader;
     conn->read_task.ctx = ctx;
 

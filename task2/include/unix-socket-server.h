@@ -15,8 +15,7 @@ typedef struct unix_socket_server_connection uss_connection_t;
 
 typedef bool (*uss_acceptor_t)(uss_t *srv, uss_connection_t *conn, void *ctx);
 typedef void (*uss_reader_t)(uss_t *srv, uss_connection_t *conn,
-                             int error,
-                             void *ctx);
+                             int error, void *ctx);
 typedef void (*uss_writer_t)(uss_t *srv, uss_connection_t *conn,
                              int error,
                              void *ctx);
@@ -36,21 +35,23 @@ struct unix_socket_server_connection {
 
     int fd;
 
+    bool eof;
+
     struct {
         uss_reader_t reader;
         void *ctx;
-        void *d;
-        size_t waiting;
+        buffer_t b;
         size_t currently_read;
     } read_task;
 
     struct {
         uss_writer_t writer;
         void *ctx;
-        const void *d;
-        size_t total;
+        buffer_t b;
         size_t currently_wrote;
     } write_task;
+
+    void *priv;
 };
 
 bool unix_socket_server_init(uss_t *srv,
@@ -68,7 +69,7 @@ void unix_socket_server_send(uss_t *srv, uss_connection_t *conn,
                              uss_writer_t writer,
                              void *ctx);
 void unix_socket_server_recv(uss_t *srv, uss_connection_t *conn,
-                             void *d, size_t sz,
+                             size_t sz,
                              uss_reader_t reader,
                              void *ctx);
 
