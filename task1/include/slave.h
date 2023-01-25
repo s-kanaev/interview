@@ -4,8 +4,6 @@
 # include "io-service.h"
 # include "timer.h"
 
-# define SLAVE_UDP_PORT 12345
-
 struct master;
 
 struct slave;
