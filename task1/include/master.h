@@ -16,11 +16,20 @@ struct master {
     io_service_t *iosvc;
     tmr_t tmr;
 
-    int8_t avg_temperature;
-    uint8_t avg_brightness;
+    /** slaves' parameters sum to use to calculate average */
+    struct {
+        int32_t temperature;
+        uint32_t illumination;
+    } sum;
 
-    time_t last_avg_timestamp;
+    /** calculated averages and it's timestamp */
+    struct {
+        int8_t temperature;
+        uint8_t illumination;
+        time_t timestamp;
+    } avg;
 
+    /** slaves' lookup tree */
     avl_tree_t slaves;
 
     int udp_socket;
