@@ -11,7 +11,7 @@ struct slave;
 typedef struct slave slave_t;
 
 typedef enum {
-    SLAVE_IDLE,             /**< normal slave state */
+    SLAVE_IDLE  = 0x00,     /**< normal slave state */
     SLAVE_POLLING,          /**< slave initialized or responded to vote */
     SLAVE_MASTER,           /**< same as \c SLAVE_IDLE but
                                  mastering other slaves */
@@ -41,7 +41,6 @@ struct slave {
 };
 
 void slave_init(slave_t *sl, io_service_t *iosvc,
-                const char *local_addr,
                 const char *iface);
 void slave_deinit(slave_t *sl);
 void slave_run(slave_t *sl);

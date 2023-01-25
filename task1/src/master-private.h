@@ -104,4 +104,11 @@ master_act(master_t *m, const pr_signature_t *packet, int fd,
 void
 master_set_broadcast_addr(master_t *m, const struct sockaddr *bcast_addr);
 
+/**
+ * Starts master instance timer
+ * \param [in] m master instance
+ */
+void
+master_start(master_t *m);
+
 #endif /* _MASTER_PRIVATE_H_ */

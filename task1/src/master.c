@@ -108,17 +108,20 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
         return;
     }
 
+    if (((struct sockaddr_in *)&remote_addr)->sin_addr.s_addr ==
+        ((struct sockaddr_in *)&m->local_addr)->sin_addr.s_addr) /* discard */
+        return;
+
     master_act(m, packet, fd, (struct sockaddr_in *)&remote_addr);
 }
 
 /**************** API ****************/
 void master_init(master_t *m, io_service_t *iosvc,
-                 const char *local_addr,
                  const char *iface) {
     struct addrinfo addr;
     struct sockaddr brcast_addr;
 
-    assert(m && iosvc && local_addr && iface);
+    assert(m && iosvc && iface);
 
     master_init_(m, iosvc);
 
@@ -159,8 +162,6 @@ void master_deinit(master_t *m) {
 void master_run(master_t *m) {
     assert(m);
 
-    master_arm_timer(m);
-
     io_service_post_job(m->iosvc, m->udp_socket, IO_SVC_OP_READ,
                         !IOSVC_JOB_ONESHOT,
                         (iosvc_job_function_t)data_received,
@@ -172,6 +173,8 @@ void master_run(master_t *m) {
 
     sendto(m->udp_socket, &reset, sizeof(reset), 0,
            (struct sockaddr *)&m->bcast_addr, sizeof(m->bcast_addr));
+
+    master_start(m);
 
     io_service_run(m->iosvc);
 }
