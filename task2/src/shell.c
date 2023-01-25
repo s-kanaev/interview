@@ -39,10 +39,15 @@
 
 #define DRIVER_PRE          "Driver: "
 #define DRIVER_PRE_LEN      (sizeof(DRIVER_PRE) - 1)
+
 #define SLOT_PRE            "Slot: "
 #define SLOT_PRE_LEN        (sizeof(SLOT_PRE) - 1)
+
 #define DRIVER_POST         "Commands:\n"
 #define DRIVER_POST_LEN     (sizeof(DRIVER_POST) - 1)
+
+#define SPACE               " "
+#define SPACE_LEN           (sizeof(SPACE) - 1)
 
 typedef struct {
     const char *driver_name;
@@ -124,8 +129,7 @@ void print_drv(shell_t *sh, avl_tree_node_t *atn);
 /********************** private **********************/
 void print_drv(shell_t *sh, avl_tree_node_t *atn) {
     shell_driver_t *sd;
-    char slot[MAX_DIGITS];
-    size_t slot_len;
+    size_t idx;
 
     if (!atn)
         return;
@@ -135,15 +139,26 @@ void print_drv(shell_t *sh, avl_tree_node_t *atn) {
 
     sd = (shell_driver_t *)atn->data;
 
-    write(sh->output_fd, DRIVER_PRE, DRIVER_PRE_LEN);
-    write(sh->output_fd, sd->name, sd->name_len);
-    write(sh->output_fd, NEW_LINE, NEW_LINE_LEN);
-    write(sh->output_fd, SLOT_PRE, SLOT_PRE_LEN);
-    slot_len = snprintf(slot, sizeof(slot), "%d", sd->slot);
-    write(sh->output_fd, slot, slot_len);
-    write(sh->output_fd, NEW_LINE, NEW_LINE_LEN);
+    fprintf(
+        sh->output,
+        DRIVER_PRE "%*s" NEW_LINE
+        SLOT_PRE "%u" NEW_LINE
+        DRIVER_POST,
+        sd->name_len, sd->name,
+        sd->slot
+    );
+    for (idx = 0; idx < vector_count(&sd->commands); ++idx) {
+        const pr_driver_command_info_t *dci =
+            (const pr_driver_command_info_t *)vector_get(&sd->commands, idx);
 
-    /* TODO print commands */
+        fprintf(
+            sh->output,
+            "%*s <arity: %u> --- %*s" NEW_LINE,
+            MAX_COMMAND_NAME_LEN, dci->name,
+            dci->arity,
+            MAX_COMMAND_DESCRIPTION_LEN, dci->descr
+        );
+    }
 }
 
 void cmd_list(shell_t *sh) {
@@ -152,12 +167,12 @@ void cmd_list(shell_t *sh) {
 }
 
 void cmd_help(shell_t *sh) {
-    write(sh->output_fd, HELP_MSG, HELP_MSG_LEN);
+    fprintf(sh->output, HELP_MSG);
     finish_cmd(sh);
 }
 
 void cmd_invalid(shell_t *sh) {
-    write(sh->output_fd, INVALID_MSG, INVALID_MSG_LEN);
+    fprintf(sh->output, INVALID_MSG);
     finish_cmd(sh);
 }
 
@@ -168,7 +183,7 @@ void cmd_cmd(shell_t *sh,
 }
 
 void finish_cmd(shell_t *sh) {
-    write(sh->output_fd, PROMPT, PROMPT_LEN);
+    fprintf(sh->output, PROMPT);
 }
 
 bool detect_newline_on_input(shell_t *sh) {
@@ -306,12 +321,13 @@ do {                                                                            
 
 void reader_info(usc_t *usc, int error, shell_t *sh) {
     size_t required_length;
-    const pr_driver_command_info_t *pci;
+    shell_driver_t *sd;
+    const pr_driver_command_info_t *dci;
     const pr_driver_info_t *di = (const pr_driver_info_t *)usc->read_task.b.data;
 
     READ_ERROR_HANDLER;
 
-    required_length = sizeof(*di) + sizeof(*pci) * di->commands_number;
+    required_length = sizeof(*di) + sizeof(*dci) * di->commands_number;
 
     if (usc->read_task.b.user_size < required_length) {
         usc->read_task.b.offset = usc->read_task.b.user_size;
@@ -324,7 +340,9 @@ void reader_info(usc_t *usc, int error, shell_t *sh) {
         return;
     }
 
-    /* TODO parse and memorize commands */
+    sd = (shell_driver_t *)usc->priv;
+    vector_init(&sd->commands, sizeof(*dci), di->commands_number);
+    memcpy(sd->commands.data.data, di + 1, sizeof(*dci) * di->commands_number);
 }
 
 void reader_response(usc_t *usc, int error, shell_t *sh) {
@@ -346,8 +364,8 @@ void reader_response(usc_t *usc, int error, shell_t *sh) {
         return;
     }
 
-    write(sh->output_fd, (const char *)(dr + 1), dr->len);
-    write(sh->output_fd, PROMPT, PROMPT_LEN);
+    fprintf(sh->output, "%*s" NEW_LINE, dr->len, (const char *)(dr + 1));
+    finish_cmd(sh);
 }
 
 void reader_signature(usc_t *usc, int error, shell_t *sh) {
@@ -483,6 +501,8 @@ void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
             name_len, name, strerror(errno));
         abort();
     }
+
+    sd->usc.priv = sd;
 
     sd->name = (char *)malloc(dd.driver_name_len);
     memcpy(sd->name, dd.driver_name, dd.driver_name_len);
@@ -629,7 +649,7 @@ void base_dir_event(int fd, io_svc_op_t op, shell_t *sh) {
 /********************** API **********************/
 bool shell_init(shell_t *sh,
                 const char *base_path, size_t base_path_len,
-                io_service_t *iosvc, int input_fd, int output_fd) {
+                io_service_t *iosvc, int input_fd, FILE *output) {
     bool ret;
 
     assert(sh && iosvc && (!base_path_len || (base_path && base_path_len)));
@@ -663,7 +683,7 @@ bool shell_init(shell_t *sh,
     buffer_init(&sh->input_buffer, 0, bp_non_shrinkable);
 
     sh->input_fd = input_fd;
-    sh->output_fd = output_fd;
+    sh->output = output;
 
     return true;
 }

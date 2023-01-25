@@ -4,7 +4,9 @@
 # include "io-service.h"
 # include "avl-tree.h"
 # include "unix-socket-client.h"
+# include "protocol.h"
 
+# include <stdio.h>
 # include <stddef.h>
 # include <stdbool.h>
 
@@ -22,7 +24,7 @@ struct shell {
     bool running;
 
     int input_fd;
-    int output_fd;
+    FILE *output;
 
     buffer_t input_buffer;
     /*
@@ -42,11 +44,14 @@ struct shell_driver {
 
     unsigned int slot;
 
+    /* vector of pr_driver_command_info_t */
+    vector_t commands;
+
     usc_t usc;
 };
 
 bool shell_init(shell_t *sh, const char *base_path, size_t base_path_len,
-                io_service_t *iosvc, int input_fd, int output_fd);
+                io_service_t *iosvc, int input_fd, FILE *output);
 void shell_deinit(shell_t *sh);
 void shell_run(shell_t *sh);
 

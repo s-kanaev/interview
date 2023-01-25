@@ -47,6 +47,8 @@ struct unix_socket_client {
         buffer_t b;
         size_t currently_wrote;
     } write_task;
+
+    void *priv;
 };
 
 bool unix_socket_client_init(usc_t *usc,
