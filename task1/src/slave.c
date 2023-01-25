@@ -199,6 +199,11 @@ void slave_act_idle(slave_t *sl, const pr_signature_t *packet, int fd,
             break;
 
         case PR_VOTE:
+            LOG(LOG_LEVEL_DEBUG,
+                "  Vote received while idle: %u vs %u, (max: %u)\n",
+                (unsigned int)(((const pr_vote_t *)packet)->vote),
+                (unsigned int)sl->vote_sent,
+                (unsigned int)sl->max_vote_per_poll);
             slave_prepare_to_poll(sl, (const pr_vote_t *)packet);
             slave_initialize_master_polling(sl);
             break;
@@ -217,6 +222,12 @@ void slave_act_poll(slave_t *sl, const pr_signature_t *packet, int fd,
     switch (packet->s) {
         case PR_VOTE:
             vote = (const pr_vote_t *)packet;
+
+            LOG(LOG_LEVEL_DEBUG,
+                "  Vote received while polling: %u vs %u, (max: %u)\n",
+                (unsigned int)(((const pr_vote_t *)packet)->vote),
+                (unsigned int)sl->vote_sent,
+                (unsigned int)sl->max_vote_per_poll);
 
             if (sl->max_vote_per_poll < vote->vote)
                 sl->max_vote_per_poll = vote->vote;
@@ -259,6 +270,12 @@ do {                                        \
 
     switch (packet->s) {
         case PR_VOTE:
+            LOG(LOG_LEVEL_DEBUG,
+                "  Vote received while mastering: %u vs %u, (max: %u)\n",
+                (unsigned int)(((const pr_vote_t *)packet)->vote),
+                (unsigned int)sl->vote_sent,
+                (unsigned int)sl->max_vote_per_poll);
+
             IDLE;
 
             slave_prepare_to_poll(sl, (const pr_vote_t *)packet);
@@ -302,6 +319,12 @@ void slave_act_waiting_master(slave_t *sl, const pr_signature_t *packet, int fd,
 
     switch (packet->s) {
         case PR_VOTE:
+            LOG(LOG_LEVEL_DEBUG,
+                "  Vote received while waiting for master: %u vs %u, (max: %u)\n",
+                (unsigned int)(((const pr_vote_t *)packet)->vote),
+                (unsigned int)sl->vote_sent,
+                (unsigned int)sl->max_vote_per_poll);
+
             slave_disarm_master_gone_timer(sl);
             slave_prepare_to_poll(sl, (const pr_vote_t *)packet);
             slave_initialize_master_polling(sl);

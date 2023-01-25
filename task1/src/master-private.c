@@ -86,7 +86,7 @@ master_update_slave(master_t *m,
     slave_description_t *atn_sd;
 
     LOG(LOG_LEVEL_DEBUG,
-        "Slave: ID = %u, T = %d, IL = %u\n",
+        "  Slave: ID = %u, T = %d, IL = %u\n",
         (unsigned int)ip,
         (int)sd->temperature,
         (unsigned int)sd->illumination);
@@ -121,7 +121,7 @@ master_calculate_averages(master_t *m) {
                           : 0;
 
     LOG(LOG_LEVEL_DEBUG,
-        "Averages: T = %d, IL = %u\n",
+        "    Averages: T = %d, IL = %u\n",
         (int)m->avg.temperature,
         (unsigned int)m->avg.illumination);
 
