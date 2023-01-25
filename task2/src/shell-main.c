@@ -15,6 +15,13 @@ int main(int argc, char **argv) {
 
     io_service_init(&iosvc);
 
+    if (!wait_for_sigterm_sigint(&iosvc)) {
+        LOG(LOG_LEVEL_FATAL, "Can't initiate SIGTERM awaiting: %s\n",
+            strerror(errno));
+
+        exit(1);
+    }
+
     if (!shell_init(&sh, DIR, DIR_LEN, &iosvc, STDIN_FILENO, stdout)) {
         LOG(LOG_LEVEL_FATAL, "Can't initialize shell: %s\n",
             strerror(errno));
