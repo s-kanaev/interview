@@ -1,0 +1,20 @@
+Analyzer of parenthesis.
+It is necessary to develop program module that analyzes sequence of characters and finds out its state in terms of closed parenthesis.
+You have to identify all possible cases and design the module providing a user all necessary info you think essential to describe each concrete state.
+Additional requirements:
+1) All non-parenthesis characters in the sequence have no impact on the parenthesis state.
+2) The module shall be able to indicate current state of the sequence at arbitrary point.
+3) There is no limitation on length of the sequence (it might be tested with huge amount of data).
+
+To test the module the following simple Linux application has to be implemented:
+1) The app shall read out lines from standard input stream. Each line shall be
+handled as separate sequence of characters.
+2) The app shall report state of each line to standard output.
+5) The app shall report state of last sequence to output and exit if EOF is detected or some reading failure occurred.
+6) Exit code of the app shall identify the reason of exit.
+
+Additional Implementation Notes
+1. You should use std C++ (program will be compiled and tested in Linux OS).
+2. It is nice to design application in object oriented manner.
+3. It is nice to comment classes, methods, data members, etc in English (Doxygen notation is preferable).
+
