@@ -56,7 +56,7 @@
 char ID[name_len + MAX_DIGITS + 1];             \
 size_t ID_len;                                  \
                                                 \
-ID_len = sprintf(ID, "%*s%u",                   \
+ID_len = sprintf(ID, "%.*s%u",                  \
                  name_len, name, slot);
 
 
