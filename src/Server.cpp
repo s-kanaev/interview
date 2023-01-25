@@ -6,23 +6,28 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/signal_set.hpp>
-// #include <json_spirit.h>
 #include <json_spirit_writer_template.h>
 #include <json_spirit_reader_template.h>
+#include <boost/thread/mutex.hpp>
 #include <mutex>
 #include <condition_variable>
 #include <vector>
+#include <string>
 #include <cstring>
 #include <cstdio>
 
 namespace http = boost::network::http;
 namespace utils = boost::network::utils;
 
+// flag showing the servir is running ant its mutex
+boost::mutex _server_running_mutex;
+bool _server_running = false;
+
 // asynchronous server request handler
 struct AsyncRequestHandler {
 protected:
-    // for use with condition variable of post request
-    std::mutex m_mutex;
+    // let's make a thread safe json read
+    boost::mutex m_json_mutex;
     // typedef to decrease line length
     typedef boost::iterator_range<char const *> rValue;
 
@@ -32,12 +37,26 @@ protected:
                                 std::size_t size,
                                 async_server::connection_ptr connection,
                                 std::string *result,
-                                std::condition_variable *cv)
+                                boost::condition_variable *cv,
+                                boost::mutex *mutex,
+                                int *waiting_length)
     {
-        std::unique_lock<std::mutex> locker(m_mutex);
+        boost::unique_lock<boost::mutex> locker(*mutex);
         result->append(input_range.begin());
-        cv->notify_one();
+        //printf("%p waiting_length = %d, received = %d\n",
+        //       waiting_length, *waiting_length, strlen(input_range.begin()));
+        (*waiting_length) -= strlen(input_range.begin());
+        if (*waiting_length <= 0) {
+            cv->notify_one();
+        }
     }
+
+    // thread safe json reader
+    bool json_read_thread_safe(const std::string& s, json_spirit::Value& value )
+    {
+        boost::unique_lock<boost::mutex> scoped_lock(m_json_mutex);
+        return json_spirit::read_string<std::string, json_spirit::Value>(s, value);
+    };
 
     // post request handler
     void HandlePostRequest(async_server::request const& request,
@@ -71,17 +90,38 @@ protected:
         }
 
         // conditional to wait for request data receiver
-        std::condition_variable cv;
-        std::unique_lock<std::mutex> locker(m_mutex);
+        boost::condition_variable cv;
+        // for use with condition variable of post request
+        boost::mutex _mutex;
+        boost::unique_lock<boost::mutex> locker(_mutex);
+        int waiting_length = 0;
+
+        // get request data length
+        async_server::request::vector_type::iterator it;
+        for (it = request.headers.begin(); it != request.headers.end(); ++it) {
+            if (0 == it->name.compare("Content-Length")) {
+                sscanf(it->value.c_str(), "%d", &waiting_length);
+                break;
+            }
+        }
+        //printf("Waiting for: %d bytes\n", waiting_length);
+        if (waiting_length == 0) {
+            db_request->request_type = REQUEST_INVALID;
+            return;
+        }
 
         // let's read supplementary data
         connection->read(
                     boost::bind(
                         &AsyncRequestHandler::ConnectionReadCallback,
-                        this, _1, _2, _3, _4, &request_body, &cv));
+                        this, _1, _2, _3, _4,
+                        &request_body, &cv, &_mutex, &waiting_length));
 
-        cv.wait(locker);
-        m_mutex.unlock();
+        cv.wait(locker, [&]() {
+                    return (waiting_length <= 0) ||
+                           boost::this_thread::interruption_requested();
+                });
+        locker.unlock();
 
         // decode request_body from json
         if (request_body.empty()) {
@@ -91,7 +131,8 @@ protected:
         json_spirit::Value mval;
         json_spirit::Object obj;
         bool success;
-        success = json_spirit::read_string<std::string, json_spirit::Value>(request_body, mval);
+        success = json_read_thread_safe(request_body, mval);
+        //success = json_spirit::read_string<std::string, json_spirit::Value>(request_body, mval);
         if (success) {
             // valid request should have exactly 3 values
             if ((mval.type() == json_spirit::obj_type) &&
@@ -215,6 +256,11 @@ static async_server::response_header common_headers[] = {
 void ServerSendReply(DBReply db_reply,
                      async_server::connection_ptr connection)
 {
+    // lock _server_running flag to prevent stop in mid of request sending
+    boost::unique_lock<boost::mutex> server_running_lock(_server_running_mutex);
+    if (!_server_running) {
+        return;
+    }
     // full reply string
     std::string reply_string("");
     // single db record for the reply
@@ -275,8 +321,13 @@ void Signal_INT_TERM_handler(const boost::system::error_code& error,
                              boost::shared_ptr<async_server> server_instance)
 {
     // just stop it if no error dispatched
-    if (!error)
+    if (!error) {
+        printf("Stopping server\n");
+        boost::unique_lock<boost::mutex> server_running_lock(_server_running_mutex);
+        _server_running = false;
+        server_running_lock.unlock();
         server_instance->stop();
+    }
 }
 
 /*
@@ -286,6 +337,7 @@ void Signal_INT_TERM_handler(const boost::system::error_code& error,
    - set sigint/sigterm signals handlers to stop server
    - call to run() method of server instance
    - interrupt all threads in thread pool
+   - stop io_service
    - join all threads in pool
  */
 void RunServer(std::string address_str, std::string port_str)
@@ -297,19 +349,22 @@ void RunServer(std::string address_str, std::string port_str)
     options.address(address_str)
            .port(port_str)
            .thread_pool(threadPool)
-           .io_service(iOService);
- //            .reuse_address(true) // FIXME: ???
+           .io_service(iOService)
+           .reuse_address(true);
    _server = boost::shared_ptr<async_server>(
         new async_server(async_server::options(options)));
 
-    // TODO: set SIGINT and SIGTERM handlers
     boost::asio::signal_set _signals(*iOService, SIGINT, SIGTERM);
     _signals.async_wait(boost::bind(Signal_INT_TERM_handler, _1, _2, _server));
 
+    boost::unique_lock<boost::mutex> server_running_lock(_server_running_mutex);
+    _server_running = true;
+    server_running_lock.unlock();
     _server->run(); // it will block
 
     threadGroup->interrupt_all();
-    iOServiceWork.reset();
+
     iOService->stop();
+
     threadGroup->join_all();
 }
