@@ -8,7 +8,7 @@ int main(int argc, char **argv)
         std::cout << "usage: " << argv[0]
                   << " host port username password database-name table-name server-host server-port"
                   << std::endl;
-        return 0;
+        exit(0);
     }
     std::string _host = argv[1],
                 _port = argv[2],
