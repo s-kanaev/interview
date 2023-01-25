@@ -40,13 +40,6 @@
 class ParenthesisChecker {
 public:
     /*** types ***/
-    enum class State {
-        wait_for_open,
-        wait_for_any,
-        finish          = wait_for_open,    /// the only valid state after
-                                            /// a call to \c done
-    };
-
     struct Context {
         ssize_t     openIndex   = 0;    /// current open bracket index
                                         /// less than nil indicates that
@@ -60,6 +53,13 @@ public:
     };
 
 private:
+    enum class State {
+        wait_for_open,
+        wait_for_any,
+        finish          = wait_for_open,    /// the only valid state after
+                                            /// a call to \c done
+    };
+
     /*** data ***/
     char    _opening;
     char    _closing;
@@ -113,10 +113,6 @@ public:
 
     const Context& getContext() const {
         return _context;
-    }
-
-    State getState() const {
-        return _state;
     }
 };
 
