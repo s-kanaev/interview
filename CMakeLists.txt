@@ -23,8 +23,8 @@ set(NEED_BOOST_LIBS boost_system-mt boost_thread-mt boost_date_time-mt boost_pro
 add_library(server STATIC ${SRCS})
 target_link_libraries(server pthread rt ${libpqxx_LDFLAGS} ${NEED_BOOST_LIBS} ${CPPNETLIB_LIBRARIES})
 
-add_executable(interview-satellitesoft main.cpp)
-target_link_libraries(interview-satellitesoft server pthread rt ${libpqxx_LDFLAGS} ${NEED_BOOST_LIBS} ${CPPNETLIB_LIBRARIES})
+add_executable(server.bin main.cpp)
+target_link_libraries(server.bin server pthread rt ${libpqxx_LDFLAGS} ${NEED_BOOST_LIBS} ${CPPNETLIB_LIBRARIES})
 
-add_executable(client client.cpp)
-target_link_libraries(client ${NEED_BOOST_LIBS} ${CPPNETLIB_LIBRARIES})
+add_executable(client.bin client.cpp)
+target_link_libraries(client.bin ${NEED_BOOST_LIBS} ${CPPNETLIB_LIBRARIES})
