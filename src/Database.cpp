@@ -299,7 +299,6 @@ Database::DoRequest(void)
             boost::unique_lock<boost::mutex> sl(m_queue_mutex);
             return !m_request_queue.empty() || !m_connected;
         });
-
         boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
         DBRequest request;
         async_server::connection_ptr co;
