@@ -27,6 +27,7 @@ struct slave {
 
     slave_state_t state;
 
+    uint32_t vote_sent;
     uint32_t max_vote_per_poll;
 
     uint8_t illumination;
