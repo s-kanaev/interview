@@ -2,6 +2,7 @@
 # define _MASTER_PRIVATE_H_
 
 # include "master.h"
+# include "protocol.h"
 
 typedef struct slave_description {
     int8_t temperature;
@@ -79,5 +80,14 @@ master_init_(master_t *m,
  */
 void
 master_deinit_(master_t *m);
+
+/**
+ * Act appropriately to data received
+ * \param [in] m master instance
+ * \param [in] packet data received header
+ * \param [in] fd UDP socket fd to send response if any
+ */
+void
+master_act(master_t *m, const pr_signature_t *packet, int fd);
 
 #endif /* _MASTER_PRIVATE_H_ */
