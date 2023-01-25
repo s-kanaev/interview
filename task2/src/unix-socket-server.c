@@ -36,7 +36,7 @@ void close_connections(avl_tree_node_t *atn) {
 
 void close_connection(uss_connection_t *ussc) {
     buffer_deinit(&ussc->read_task.b);
-    buffer_deinit(&ussc->read_task.b);
+    buffer_deinit(&ussc->write_task.b);
 
     shutdown(ussc->fd, SHUT_RDWR);
     close(ussc->fd);
@@ -172,6 +172,8 @@ bool unix_socket_server_init(uss_t *srv,
                              io_service_t *iosvc) {
     assert(srv && name && name_len);
 
+    memset(srv, 0, sizeof(*srv));
+
     srv->iosvc = iosvc;
     srv->acceptor = NULL;
 
@@ -181,6 +183,8 @@ bool unix_socket_server_init(uss_t *srv,
         return false;
 
     avl_tree_init(&srv->connections, true, sizeof(uss_connection_t));
+
+    return true;
 }
 
 void unix_socket_server_deinit(uss_t *srv) {
@@ -191,12 +195,10 @@ void unix_socket_server_deinit(uss_t *srv) {
 }
 
 bool unix_socket_server_listen(uss_t *srv,
-                               uss_acceptor_t acceptor, void *ctx) {
+                               uss_acceptor_t _acceptor, void *ctx) {
     assert(srv);
 
-    memset(srv, 0, sizeof(*srv));
-
-    srv->acceptor = acceptor;
+    srv->acceptor = _acceptor;
     srv->acceptor_ctx = ctx;
 
     if (listen(srv->fd, BACKLOG)) {
