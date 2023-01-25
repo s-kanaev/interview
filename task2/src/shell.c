@@ -23,6 +23,27 @@
 #define PROMPT              ">"
 #define PROMPT_LEN          (sizeof(PROMPT) - 1)
 
+#define HELP_MSG                                    \
+"Commands:\n"                                       \
+"list --- list all drivers\n"                       \
+"help --- print this message\n"                     \
+"cmd drv slot drv_cmd ... --- send command "        \
+"drv_cmd to driver drv at slot with arguments\n"
+#define HELP_MSG_LEN        (sizeof(HELP_MSG) - 1)
+
+#define INVALID_MSG         "Invalid command\n"
+#define INVALID_MSG_LEN     (sizeof(INVALID_MSG) - 1)
+
+#define NEW_LINE            "\n"
+#define NEW_LINE_LEN        (sizeof(NEW_LINE) - 1)
+
+#define DRIVER_PRE          "Driver: "
+#define DRIVER_PRE_LEN      (sizeof(DRIVER_PRE) - 1)
+#define SLOT_PRE            "Slot: "
+#define SLOT_PRE_LEN        (sizeof(SLOT_PRE) - 1)
+#define DRIVER_POST         "Commands:\n"
+#define DRIVER_POST_LEN     (sizeof(DRIVER_POST) - 1)
+
 typedef struct {
     const char *driver_name;
     size_t driver_name_len;
@@ -90,33 +111,60 @@ void cmd_invalid(shell_t *sh);
 static
 void cmd_cmd(shell_t *sh,
              const char *drv,
-             const char *slot,
+             unsigned int slot,
              const char *cmd,
              vector_t *args);
 
 static inline
 void finish_cmd(shell_t *sh);
 
+static
+void print_drv(shell_t *sh, avl_tree_node_t *atn);
+
 /********************** private **********************/
+void print_drv(shell_t *sh, avl_tree_node_t *atn) {
+    shell_driver_t *sd;
+    char slot[MAX_DIGITS];
+    size_t slot_len;
+
+    if (!atn)
+        return;
+
+    print_drv(sh, atn->left);
+    print_drv(sh, atn->right);
+
+    sd = (shell_driver_t *)atn->data;
+
+    write(sh->output_fd, DRIVER_PRE, DRIVER_PRE_LEN);
+    write(sh->output_fd, sd->name, sd->name_len);
+    write(sh->output_fd, NEW_LINE, NEW_LINE_LEN);
+    write(sh->output_fd, SLOT_PRE, SLOT_PRE_LEN);
+    slot_len = snprintf(slot, sizeof(slot), "%d", sd->slot);
+    write(sh->output_fd, slot, slot_len);
+    write(sh->output_fd, NEW_LINE, NEW_LINE_LEN);
+
+    /* TODO print commands */
+}
+
 void cmd_list(shell_t *sh) {
-    /* TODO list all drivers with slots */
+    print_drv(sh, sh->clients.root);
     finish_cmd(sh);
 }
 
 void cmd_help(shell_t *sh) {
-    /* TODO print help */
+    write(sh->output_fd, HELP_MSG, HELP_MSG_LEN);
     finish_cmd(sh);
 }
 
 void cmd_invalid(shell_t *sh) {
-    /* TODO */
+    write(sh->output_fd, INVALID_MSG, INVALID_MSG_LEN);
     finish_cmd(sh);
 }
 
 void cmd_cmd(shell_t *sh,
-             const char *drv, const char *slot, const char *cmd,
+             const char *drv, unsigned int slot, const char *cmd,
              vector_t *args) {
-    /* TODO */
+    /* TODO driver command */
 }
 
 void finish_cmd(shell_t *sh) {
@@ -141,6 +189,9 @@ void run_command_from_input(shell_t *sh) {
     char *line = (char *)sh->input_buffer.data;
     char *token;
     char *cmd, *drv, *slot, *drv_cmd;
+    char *slot_endptr = NULL;
+    unsigned int slot_number;
+    vector_t args;
 
     line[sh->input_buffer.offset] = '\0';
 
@@ -148,6 +199,7 @@ void run_command_from_input(shell_t *sh) {
 
     if (!cmd) {
         LOG_MSG(LOG_LEVEL_WARN, "Invalid input: no command\n");
+        cmd_invalid(sh);
         return;
     }
 
@@ -168,10 +220,33 @@ void run_command_from_input(shell_t *sh) {
     slot = strtok(NULL, DELIM);
     drv_cmd = strtok(NULL, DELIM);
 
+    if (!drv || !slot || !drv_cmd) {
+        LOG(LOG_LEVEL_WARN, "Invalid input: %s %s %s\n",
+            drv ? drv : "n / a",
+            slot ? slot : "n / a",
+            drv_cmd ? drv_cmd : "n / a");
+        cmd_invalid(sh);
+        return;
+    }
 
+    slot_number = strtoul(slot, &slot_endptr, 10);
+    if (*slot_endptr != '\0') {
+        LOG_MSG(LOG_LEVEL_WARN, "Slot is not number\n");
+        cmd_invalid(sh);
+        return;
+    }
 
+    vector_init(&args, sizeof(token), 0);
+    token = strtok(NULL, DELIM);
 
-    /* TODO tokenize the string */
+    while (token) {
+        *(char **)vector_append(&args) = token;
+        token = strtok(NULL, DELIM);
+    }
+
+    cmd_cmd(sh, drv, slot_number, drv_cmd, &args);
+
+    vector_deinit(&args);
 
     return;
 }
@@ -271,7 +346,8 @@ void reader_response(usc_t *usc, int error, shell_t *sh) {
         return;
     }
 
-    /* TODO parse and print response */
+    write(sh->output_fd, (const char *)(dr + 1), dr->len);
+    write(sh->output_fd, PROMPT, PROMPT_LEN);
 }
 
 void reader_signature(usc_t *usc, int error, shell_t *sh) {
