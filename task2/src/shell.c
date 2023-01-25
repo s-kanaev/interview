@@ -743,10 +743,12 @@ void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
 
     sd->usc.priv = sd;
 
-    sd->name = (char *)malloc(dd.driver_name_len);
-    memcpy(sd->name, dd.driver_name, dd.driver_name_len);
     sd->name_len = dd.driver_name_len;
+    sd->name = (char *)malloc(dd.driver_name_len + 1);
     sd->slot = dd.slot_number;
+
+    memcpy(sd->name, dd.driver_name, dd.driver_name_len);
+    sd->name[dd.driver_name_len] = '\0';
 
     if (!unix_socket_client_connect(
         &sd->usc, name, name_len,
