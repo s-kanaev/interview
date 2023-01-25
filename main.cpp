@@ -87,7 +87,6 @@ int main(int argc, char **argv)
 ************************************************************/
 
         RunServer(_s_host, _s_port);
-
         Database::getInstance().Disconnect();
     }
     catch (std::string e) {
@@ -105,7 +104,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::cout << "Waiting for thread pool to empty" << std::endl;
+    //std::cout << "Waiting for thread pool to empty" << std::endl;
+    std::cout << "Destroying thread pool object" << std::endl;
     //sleep(5);
     threadPool.reset();
 
