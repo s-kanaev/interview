@@ -12,7 +12,7 @@ typedef struct slave slave_t;
 
 struct slave {
     io_service_t *iosvc;
-    tmr_t *tmr;
+    tmr_t tmr;
 
     struct sockaddr_storage local_addr;
     struct sockaddr_in bcast_addr;
