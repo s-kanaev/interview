@@ -139,6 +139,9 @@ void finish_cmd(shell_t *sh);
 static
 void print_drv(shell_t *sh, avl_tree_node_t *atn);
 
+static
+void writer(usc_t *usc, int error, shell_t *sh);
+
 /********************** private **********************/
 void print_drv(shell_t *sh, avl_tree_node_t *atn) {
     shell_driver_t *sd;
@@ -194,6 +197,7 @@ void cmd_cmd(shell_t *sh,
              vector_t *args) {
     buffer_t b;
     size_t length_required;
+    pr_driver_command_info_t *pdci;
     pr_driver_command_argument_t *pdca;
     pr_driver_command_t *pdc;
     size_t idx;
@@ -204,6 +208,7 @@ void cmd_cmd(shell_t *sh,
     list_t *l;
     list_element_t *le;
     shell_driver_t *sd;
+    size_t cmd_idx;
     size_t drv_len = strlen(drv);
 
     DRIVER_SLOT_ID(drv, drv_len, slot);
@@ -236,7 +241,24 @@ void cmd_cmd(shell_t *sh,
         return;
     }
 
-    /* TODO find command at fetch its index */
+    /* find command at fetch its index */
+
+    for (idx = 0; idx < vector_count(&sd->commands); ++idx) {
+        pdci = (pr_driver_command_info_t *)vector_get(&sd->commands, idx);
+
+        if (0 == strncmp((const char *)pdci->name, cmd, MAX_COMMAND_NAME_LEN))
+            break;
+    }
+
+    if (vector_count(&sd->commands) == idx) {
+        LOG(LOG_LEVEL_WARN,
+            "Couldn't find command %s for driver %s at slot %u\n",
+            cmd, drv, slot);
+        cmd_invalid(sh);
+        return;
+    }
+
+    cmd_idx = idx;
 
     length_required = sizeof(*pdc) + vector_count(args) * sizeof(*pdca);
 
@@ -266,8 +288,8 @@ void cmd_cmd(shell_t *sh,
     buffer_deinit(&b);
 
     unix_socket_client_send(
-        sd->usc, b.data, b.user_size,
-        writer, sh
+        &sd->usc, b.data, b.user_size,
+        (usc_writer_t)writer, sh
     );
 }
 
@@ -398,6 +420,31 @@ void on_input(int fd, io_svc_op_t op, shell_t *sh) {
         run_command_from_input(sh);
         shift_input(sh);
     }
+}
+
+void writer(usc_t *usc, int error, shell_t *sh) {
+    buffer_realloc(&usc->read_task.b, 0);
+    buffer_realloc(&usc->write_task.b, 0);
+
+    if (error) {
+        LOG(LOG_LEVEL_WARN, "Couldn't send to driver %*s: %s\n",
+            usc->connected_to_name_len, usc->connected_to_name,
+            strerror(errno));
+
+        if (!unix_socket_client_reconnect(usc)) {
+            LOG(LOG_LEVEL_WARN, "Couldn't reconnect to driver %*s: %s\n",
+                usc->connected_to_name_len, usc->connected_to_name,
+                strerror(errno));
+            return;
+        }
+
+        LOG_MSG(LOG_LEVEL_WARN, "Repeat your command\n");
+        fprintf(sh->output, PROMPT);
+        return;
+    }
+
+    unix_socket_client_recv(usc, sizeof(pr_signature_t),
+                            (usc_reader_t)reader_signature, sh);
 }
 
 #define READ_ERROR_HANDLER                                                      \

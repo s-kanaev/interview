@@ -229,9 +229,11 @@ bool unix_socket_client_init(usc_t *usc,
     buffer_init(&usc->read_task.b, 0, bp_non_shrinkable);
     buffer_init(&usc->write_task.b, 0, bp_non_shrinkable);
 
-    usc->name = (char *)malloc(name_len);
-    memcpy(usc->name, name, name_len);
-    usc->name_len = name_len;
+    if (name_len) {
+        usc->name = (char *)malloc(name_len);
+        memcpy(usc->name, name, name_len);
+        usc->name_len = name_len;
+    }
 
     return true;
 }
