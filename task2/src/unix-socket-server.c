@@ -43,7 +43,6 @@ void close_connection(uss_connection_t *ussc) {
 }
 
 void acceptor(int fd, io_svc_op_t op, uss_t *srv) {
-    int fd;
     int flags;
     avl_tree_node_t *atn;
     uss_connection_t *ussc;
@@ -188,7 +187,7 @@ void unix_socket_server_deinit(uss_t *srv) {
     assert(srv);
 
     close(srv->fd);
-    close_connections(&srv->connections.root);
+    close_connections(srv->connections.root);
 }
 
 bool unix_socket_server_listen(uss_t *srv,
@@ -217,7 +216,7 @@ bool unix_socket_server_listen(uss_t *srv,
 void unix_socket_server_close_connection(uss_t *srv, uss_connection_t *conn) {
     assert(srv && conn);
 
-    avl_tree_remove(conn->fd);
+    avl_tree_remove(&srv->connections, conn->fd);
 
     close_connection(conn);
 }

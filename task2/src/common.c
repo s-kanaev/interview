@@ -6,7 +6,6 @@
 #include <unistd.h>
 
 #include <sys/socket.h>
-#include <sys/un.h>
 #include <linux/un.h>
 
 int allocate_unix_socket(const char *name, size_t name_len) {

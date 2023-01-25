@@ -24,7 +24,7 @@ struct pr_driver_command_argument;
 typedef struct pr_driver_command_argument pr_driver_command_argument_t;
 
 struct pr_driver_response;
-typedef pr_driver_response pr_driver_response_t;
+typedef struct pr_driver_response pr_driver_response_t;
 
 enum {
     PR_DRV_INFO             = 0x00,

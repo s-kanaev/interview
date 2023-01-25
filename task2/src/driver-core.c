@@ -5,7 +5,7 @@
 #include "log.h"
 
 #include <assert.h>
-#include <string.h
+#include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <errno.h>
@@ -131,7 +131,8 @@ void reader(uss_t *srv, uss_connection_t *conn,
             argv[arg_idx].arg = (const char *)(dca + 1);
             argv[arg_idx].arg_len = dca->len;
 
-            dca = (const uint8_t *)(dca + 1) + dca->len;
+            dca = (const pr_driver_command_argument_t *)(
+                (const uint8_t *)(dca + 1) + dca->len);
         }
 
         buffer_init(&response, 0, bp_non_shrinkable);
@@ -179,7 +180,8 @@ void reader(uss_t *srv, uss_connection_t *conn,
         argv[arg_idx].arg = (const char *)(dca + 1);
         argv[arg_idx].arg_len = dca->len;
 
-        dca = (const uint8_t *)(dca + 1) + dca->len;
+        dca = (const pr_driver_command_argument_t *)(
+            (const uint8_t *)(dca + 1) + dca->len);
     }
 
     buffer_init(&response, 0, bp_non_shrinkable);
@@ -273,7 +275,7 @@ bool driver_core_init_(io_service_t *iosvc,
                   ? 255
                   : vector_count(&(core->payload->commands));
 
-    core->greeting_length = sizeof(pr_driver_info)
+    core->greeting_length = sizeof(pr_driver_info_t)
                             + cmd_number
                               * sizeof(pr_driver_command_info_t);
 
