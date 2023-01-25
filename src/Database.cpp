@@ -1,9 +1,13 @@
+#include "common.hpp"
 #include "Database.hpp"
 
 #include <cstdio>
 #include <vector>
 #include <memory>
+#include <mutex>
 #include <pqxx/pqxx>
+#include <boost/thread/mutex.hpp>
+#include <boost/thread/thread.hpp>
 
 Database::Database()
 {
@@ -92,22 +96,38 @@ Database::CheckRecordByID(int id)
     return found;
 }
 
+void finalize_request_arguments(char *f_name, char *l_name, char b_date)
+{
+    if (f_name) free(f_name);
+    if (l_name) free(l_name);
+    if (b_date) free(b_date);
+}
+
 void
 Database::DoPostRequest(PostRequest *post_request)
 {
     std::string request_string("");
-    int id = post_request->id;
+    bigserial_t id = post_request->id;
     char *first_name = post_request->first_name,
          *last_name = post_request->last_name,
          *birth_date = post_request->birth_date;
 
     m_force_reply = false;
+    m_dbreply.Records()->clear();
+
+    if (!first_name || !last_name || !birth_date) {
+        m_dbreply.SetKind(REPLY_BAD_REQUEST);
+        finalize_request_arguments(first_name, last_name, birth_date);
+        return;
+    }
+
     if (id > 0) {
         // try to check if it is the id exists in db
         bool found;
         found = CheckRecordByID(id);
         if (!found) {
             m_dbreply.SetKind(REPLY_NOT_FOUND);
+            finalize_request_arguments(first_name, last_name, birth_date);
             return;
         } else {
             // POST /users/173
@@ -130,19 +150,23 @@ Database::DoPostRequest(PostRequest *post_request)
     Request(request_string);
     // it was either update or insert
     m_dbreply.SetKind(m_result.affected_rows() > 0 ? REPLY_OK : REPLY_NOT_FOUND);
+    finalize_request_arguments(first_name, last_name, birth_date);
 }
 
 void
 Database::DoDeleteRequest(DeleteRequest *delete_request)
 {
     std::string request_string("");
-    int id = delete_request->id;
+    bigserial_t id = delete_request->id;
     bool found;
+
+    m_dbreply.Records()->clear();
 
     found = CheckRecordByID(id);
 
     if (!found) {
         m_dbreply.SetKind(REPLY_NOT_FOUND);
+        return;
     } else {
         m_dbreply.SetKind(REPLY_OK);
         m_cache.SetInvalid();
@@ -161,7 +185,7 @@ void
 Database::DoGetRequest(GetRequest *get_request)
 {
     std::string request_string("");
-    int id = get_request->id;
+    bigserial_t id = get_request->id;
 
     if (!m_cache.Valid()) {
         request_string.append("SELECT id, first_name, last_name, birth_date"+
@@ -185,8 +209,14 @@ Database::DoGetRequest(GetRequest *get_request)
     }
 
     if (id > 0) {
+        std::shared_ptr<DBRecord> element = m_cache.FindValue(id);
         m_dbrecords.clear();
-        m_dbrecords.push_back(m_cache.FindValue(id));
+        if (element.get()) {
+            m_dbrecords.push_back(m_cache.FindValue(id));
+            m_dbreply.SetKind(REPLY_OK);
+        } else {
+            m_dbreply.SetKind(REPLY_NOT_FOUND);
+        }
     } else {
         std::vector<std::shared_ptr<DBRecord>>& res = m_cache.CachedValues();
         // should copy from cached records due to cache invalidation
@@ -197,12 +227,12 @@ Database::DoGetRequest(GetRequest *get_request)
 }
 
 void
-Database::QueueRequest(DBRequest, connection_object co)
+Database::QueueRequest(DBRequest db_request, connection_object co)
 {
     // lock mutex
     boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
     // add request and connection object to queues
-    m_request_queue.push(DBRequest);
+    m_request_queue.push(db_request);
     m_connection_queue.push(co);
     // unlock mutex
 }
@@ -210,39 +240,51 @@ Database::QueueRequest(DBRequest, connection_object co)
 void
 Database::DoRequest(void)
 {
-    // lock queue mutex
-    boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
-    DBRequest request;
-    connection_object co;
+    while (m_connected) {
+        // wait for notification to do some requests
+        std::unique_lock<std::mutex> locker(mutex);
+        m_db_thread_cv.wait(locker, [&](){
+            boost::unique_lock<boost::mutex> sl;
+            sl.lock(m_queue_mutex);
+            return !m_request_queue.empty() || !m_connected;
+        });
 
-    /*
-     * FIXME: think of it: use of condition_variable to wait for new request
-     */
+        boost::unique_lock<boost::mutex> scoped_lock;
+        DBRequest request;
+        connection_object co;
 
-    // retrieve request structure and connection_object
-    if (m_request_queue.empty()) return;
+        // retrieve request structure and connection_object
+        // lock queue mutex
+        scoped_lock.lock(m_queue_mutex);
+        while (!m_request_queue.empty()) {
+            request = m_request_queue.front();
+            m_request_queue.pop();
+            co = m_connection_queue.front();
+            m_connection_queue.pop();
 
-    request = m_request_queue.front();
-    m_request_queue.pop();
-    co = m_connection_queue.front();
-    m_connection_queue.pop();
+            // we don't need the lock anymore
+            scoped_lock.release();
 
-    // we don't need the lock anymore
-    scoped_lock.release();
+            // execute the request
+            switch (request.request_type) {
+                case REQUEST_GET:
+                    DoGetRequest(&(request.any_request.get_request));
+                    // this request reply is already in m_dbrecords
+                    break;
+                case REQUEST_POST:
+                    DoPostRequest(&(request.any_request.post_request));
+                    break;
+                case REQUEST_DELETE:
+                    DoDeleteRequest(&(request.any_request.delete_request));
+                    break;
+                default:
+                    m_dbreply.SetKind(REPLY_BAD_REQUEST);
+                    break;
+            }
 
-    // execute the request
-    switch (request.request_type) {
-        case REQUEST_GET:
-            DoGetRequest(&(request.any_request.get_request));
-            // this request reply is already in m_dbrecords
-            break;
-        case REQUEST_POST:
-            DoPostRequest(&(request.any_request.post_request));
-            break;
-        case REQUEST_DELETE:
-            DoDeleteRequest(&(request.any_request.delete_request));
-            break;
+            // TODO: launch thread to reply to client
+            //threadPool.post(boost::bind(&Server::ReplyToClient, ServerInstance, &m_dbreply, connection_object));
+            scoped_lock.lock(m_queue_mutex);
+        }
     }
-
-    // TODO: launch thread to reply to client
 }
