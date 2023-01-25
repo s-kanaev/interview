@@ -22,6 +22,15 @@ void data_may_be_sent(int fd, io_svc_op_t op, usc_t *usc);
 static
 void data_may_be_read(int fd, io_svc_op_t op, usc_t *usc);
 
+static inline
+bool unix_socket_client_connect_(usc_t *usc,
+                                 const char *name, size_t name_len,
+                                 usc_connector_t _connector, void *ctx,
+                                 bool internal);
+
+static inline
+void unix_socket_client_disconnect_(usc_t *usc, bool internal);
+
 /**************** private ****************/
 void connector(int fd, io_svc_op_t op, usc_t *usc) {
     usc->connected = true;
@@ -120,6 +129,84 @@ void data_may_be_read(int fd, io_svc_op_t op, usc_t *usc) {
         usc->read_task.reader(usc, err, usc->read_task.ctx);
 }
 
+bool unix_socket_client_connect_(usc_t *usc,
+                                 const char *name, size_t name_len,
+                                 usc_connector_t _connector, void *ctx,
+                                 bool internal) {
+    int flags;
+    int rc;
+    struct sockaddr_un addr;
+
+    usc->connector = _connector;
+    usc->connector_ctx = ctx;
+
+    flags = fcntl(usc->fd, F_GETFL);
+
+    if (flags < 0) {
+        LOG(LOG_LEVEL_WARN, "Can't fetch socket status flags: %s\n",
+            strerror(errno));
+        LOG_MSG(LOG_LEVEL_WARN, "Will connect synchronously\n");
+    }
+    else {
+        flags |= O_NONBLOCK;
+        if (0 > fcntl(usc->fd, F_SETFL, flags)) {
+            LOG(LOG_LEVEL_WARN, "Can't socket socket status flags: %s\n",
+                strerror(errno));
+            LOG_MSG(LOG_LEVEL_WARN, "Will connect synchronously\n");
+        }
+    }
+
+    memset(&addr.sun_path, 0, sizeof(addr.sun_path));
+
+    addr.sun_family = AF_UNIX;
+    memcpy(addr.sun_path, name, name_len < UNIX_PATH_MAX ?
+                                name_len : UNIX_PATH_MAX);
+    addr.sun_path[UNIX_PATH_MAX - 1] = '\0';
+
+    rc = connect(usc->fd, (struct sockaddr *)&addr, sizeof(addr));
+
+    if (0 == rc) {
+        if (!internal) {
+            usc->connected_to_name = (char *)malloc(name_len);
+            memcpy(usc->connected_to_name, name, name_len);
+            usc->connected_to_name_len = name_len;
+        }
+
+        connector(usc->fd, IO_SVC_OP_WRITE, usc);
+        return true;
+    }
+
+    if (errno == EINPROGRESS) {
+        if (!internal) {
+            usc->connected_to_name = (char *)malloc(name_len);
+            memcpy(usc->connected_to_name, name, name_len);
+            usc->connected_to_name_len = name_len;
+        }
+
+        io_service_post_job(usc->iosvc, usc->fd,
+                            IO_SVC_OP_WRITE, IOSVC_JOB_ONESHOT,
+                            (iosvc_job_function_t)connector,
+                            usc);
+        return true;
+    }
+
+    return false;
+}
+
+void unix_socket_client_disconnect_(usc_t *usc, bool internal) {
+    shutdown(usc->fd, SHUT_RDWR);
+
+    if (!internal) {
+        close(usc->fd);
+
+        free(usc->connected_to_name);
+        usc->connected_to_name = NULL;
+        usc->connected_to_name_len = 0;
+    }
+
+    usc->connected = false;
+}
+
 /**************** API ****************/
 bool unix_socket_client_init(usc_t *usc,
                              const char *name, size_t name_len,
@@ -161,61 +248,16 @@ void unix_socket_client_deinit(usc_t *usc) {
 bool unix_socket_client_connect(usc_t *usc,
                                 const char *name, size_t name_len,
                                 usc_connector_t _connector, void *ctx) {
-    int flags;
-    int rc;
-    struct sockaddr_un addr;
+    assert(usc && name && name_len);
 
-    assert(usc);
-
-    usc->connector = _connector;
-    usc->connector_ctx = ctx;
-
-    flags = fcntl(usc->fd, F_GETFL);
-
-    if (flags < 0) {
-        LOG(LOG_LEVEL_WARN, "Can't fetch socket status flags: %s\n",
-            strerror(errno));
-        LOG_MSG(LOG_LEVEL_WARN, "Will connect synchronously\n");
-    }
-    else {
-        flags |= O_NONBLOCK;
-        if (0 > fcntl(usc->fd, F_SETFL, flags)) {
-            LOG(LOG_LEVEL_WARN, "Can't socket socket status flags: %s\n",
-                strerror(errno));
-            LOG_MSG(LOG_LEVEL_WARN, "Will connect synchronously\n");
-        }
-    }
-
-    memset(&addr.sun_path, 0, sizeof(addr.sun_path));
-
-    addr.sun_family = AF_UNIX;
-    memcpy(addr.sun_path, name, name_len < UNIX_PATH_MAX ?
-                                name_len : UNIX_PATH_MAX);
-    addr.sun_path[UNIX_PATH_MAX - 1] = '\0';
-
-    rc = connect(usc->fd, (struct sockaddr *)&addr, sizeof(addr));
-
-    if (0 == rc) {
-        connector(usc->fd, IO_SVC_OP_WRITE, usc);
-        return true;
-    }
-
-    if (errno == EINPROGRESS) {
-        io_service_post_job(usc->iosvc, usc->fd,
-                            IO_SVC_OP_WRITE, IOSVC_JOB_ONESHOT,
-                            (iosvc_job_function_t)connector,
-                            usc);
-        return true;
-    }
-
-    return false;
+    return unix_socket_client_connect_(usc, name, name_len,
+                                       _connector, ctx, false);
 }
 
 void unix_socket_client_disconnect(usc_t *usc) {
-    assert(usc);
+    assert(usc && usc->connected);
 
-    shutdown(usc->fd, SHUT_RDWR);
-    close(usc->fd);
+    unix_socket_client_disconnect_(usc, false);
 }
 
 void unix_socket_client_send(usc_t *usc,
@@ -254,3 +296,13 @@ void unix_socket_client_recv(usc_t *usc,
     );
 }
 
+bool unix_socket_client_reconnect(usc_t *usc) {
+    assert(usc && usc->connected);
+
+    unix_socket_client_disconnect_(usc, true);
+    return unix_socket_client_connect_(usc,
+                                       usc->connected_to_name,
+                                       usc->connected_to_name_len,
+                                       usc->connector, usc->connector_ctx,
+                                       true);
+}
