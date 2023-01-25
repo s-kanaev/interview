@@ -8,9 +8,6 @@
 # include <stdint.h>
 # include <netinet/in.h>
 
-# define MASTER_UDP_PORT        23456
-# define MASTER_UDP_PORT_STR    "23456"
-
 struct master;
 typedef struct master master_t;
 
