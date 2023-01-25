@@ -92,6 +92,8 @@ void data_may_be_read(int fd, io_svc_op_t op, usc_t *usc) {
     rc = ioctl(fd, FIONREAD, &pending);
 
     if (0 == pending) /* EOF */ {
+        usc->eof = true;
+
         io_service_remove_job(usc->iosvc, fd, IO_SVC_OP_READ);
 
         if (usc->read_task.reader)
