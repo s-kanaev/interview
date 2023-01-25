@@ -255,7 +255,7 @@ bool unix_socket_client_connect(usc_t *usc,
 }
 
 void unix_socket_client_disconnect(usc_t *usc) {
-    assert(usc && usc->connected);
+    assert(usc);
 
     unix_socket_client_disconnect_(usc, false);
 }
