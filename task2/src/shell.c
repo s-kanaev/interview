@@ -58,23 +58,89 @@ static
 void reader_response(usc_t *usc, int error, shell_t *sh);
 
 /********************** private **********************/
+#define READ_ERROR_HANDLER                                                      \
+do {                                                                            \
+    if (error) {                                                                \
+        LOG(LOG_LEVEL_WARN, "Error on receive: %s\n",                           \
+            strerror(errno));                                                   \
+        LOG_MSG(LOG_LEVEL_WARN, "Reconnecting\n");                              \
+                                                                                \
+        if (!unix_socket_client_reconnect(usc))                                 \
+            LOG(LOG_LEVEL_FATAL, "Can't reconnect to %*s: %s\n",                \
+                usc->connected_to_name_len, usc->connected_to_name,             \
+                strerror(errno));                                               \
+                                                                                \
+        return;                                                                 \
+    }                                                                           \
+                                                                                \
+    if (usc->eof) {                                                             \
+        LOG(LOG_LEVEL_WARN, "EOF from %*s.\n",                                  \
+            usc->connected_to_name_len, usc->connected_to_name);                \
+        LOG_MSG(LOG_LEVEL_WARN, "Possibly a delete will take place soon\n");    \
+        return;                                                                 \
+    }                                                                           \
+} while(0)
+
+void reader_info(usc_t *usc, int error, shell_t *sh) {
+    size_t required_length;
+    const pr_driver_command_info_t *pci;
+    const pr_driver_info_t *di = (const pr_driver_info_t *)usc->read_task.b.data;
+
+    READ_ERROR_HANDLER;
+
+    required_length = sizeof(*di) + sizeof(*pci) * di->commands_number;
+
+    if (usc->read_task.b.user_size < required_length) {
+        usc->read_task.b.offset = usc->read_task.b.user_size;
+        unix_socket_client_recv(
+            usc,
+            required_length - usc->read_task.b.user_size,
+            (usc_reader_t)reader_info,
+            sh);
+
+        return;
+    }
+
+    /* TODO parse and memorize commands */
+}
+
+void reader_response(usc_t *usc, int error, shell_t *sh) {
+    size_t required_length;
+    const pr_driver_response_t *dr = (const pr_driver_response_t *)usc->read_task.b.data;
+
+    READ_ERROR_HANDLER;
+
+    required_length = sizeof(*dr) + dr->len;
+
+    if (usc->read_task.b.user_size < required_length) {
+        usc->read_task.b.offset = usc->read_task.b.user_size;
+        unix_socket_client_recv(
+            usc,
+            required_length - usc->read_task.b.user_size,
+            (usc_reader_t)reader_response,
+            sh);
+
+        return;
+    }
+
+    /* TODO parse and print response */
+}
+
 void reader_signature(usc_t *usc, int error, shell_t *sh) {
     const pr_signature_t *s = (const pr_signature_t *)usc->read_task.b.data;
 
-    if (error) {
-        /* TODO */
-        return;
-    }
-
-    if (usc->eof) {
-        /* TODO */
-        return;
-    }
+    READ_ERROR_HANDLER;
 
     switch (s->s) {
         case PR_DRV_INFO:
+            unix_socket_client_recv(usc,
+                                    sizeof(pr_driver_info_t) - sizeof(*s),
+                                    (usc_reader_t)reader_info, sh);
             break;
         case PR_DRV_RESPONSE:
+            unix_socket_client_recv(usc,
+                                    sizeof(pr_driver_response_t) - sizeof(*s),
+                                    (usc_reader_t)reader_response, sh);
             break;
         case PR_DRV_COMMAND:
         default:
@@ -84,18 +150,20 @@ void reader_signature(usc_t *usc, int error, shell_t *sh) {
                 usc->connected_to_name);
             LOG_MSG(LOG_LEVEL_WARN, "Reconnecting\n");
 
-            if (!unix_socket_client_reconnect(usc)) {
-                /* TODO */
-                return;
-            }
-            /* TODO */
+            if (!unix_socket_client_reconnect(usc))
+                LOG(LOG_LEVEL_FATAL, "Can't reconnect to %*s: %s\n",
+                    usc->connected_to_name_len, usc->connected_to_name,
+                    strerror(errno));
 
             break;
     }
 }
-
+#undef READ_ERROR_HANDLER
 
 void connector(usc_t *usc, shell_t *sh) {
+    buffer_realloc(&usc->read_task.b, 0);
+    buffer_realloc(&usc->write_task.b, 0);
+
     unix_socket_client_recv(usc, sizeof(pr_signature_t),
                             (usc_reader_t)reader_signature, sh);
 }
@@ -192,11 +260,9 @@ void base_dir_smth_created(shell_t *sh, const char *name, size_t name_len) {
 
     if (!unix_socket_client_connect(
         usc, name, name_len,
-        (usc_connector_t)connector, sh)) {
+        (usc_connector_t)connector, sh))
         LOG(LOG_LEVEL_FATAL, "Can't connect to %*s: %s\n",
             name_len, name, strerror(errno));
-        abort();
-    }
 }
 
 void base_dir_smth_deleted(shell_t *sh, const char *name, size_t name_len) {
