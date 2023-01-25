@@ -536,7 +536,7 @@ void slave_disarm_mastering_timer(slave_t *sl) {
 }
 
 /**************** API ****************/
-void slave_init(slave_t *sl, io_service_t *iosvc,
+bool slave_init(slave_t *sl, io_service_t *iosvc,
                 const char *iface) {
     struct addrinfo addr;
     struct sockaddr brcast_addr;
@@ -558,7 +558,7 @@ void slave_init(slave_t *sl, io_service_t *iosvc,
             "Can't locate suitable socket: %s",
             strerror(errno));
 
-        abort();
+        return false;
     }
 
     /* fetch broadcast addr */
@@ -567,7 +567,9 @@ void slave_init(slave_t *sl, io_service_t *iosvc,
             "Can't fetch broadcast address with ioctl(SIOCGIFBRDADDR): %s\n",
             strerror(errno));
 
-        abort();
+        shutdown(sl->udp_socket, SHUT_RDWR);
+        close(sl->udp_socket);
+        return false;
     }
 
     memcpy(&sl->bcast_addr, &brcast_addr, sizeof(brcast_addr));
@@ -575,9 +577,14 @@ void slave_init(slave_t *sl, io_service_t *iosvc,
 
     sl->illumination = 0;
     sl->temperature = 0;
+
+    return true;
 }
 
 void slave_deinit(slave_t *sl) {
+    if (SLAVE_MASTER == sl->state)
+        master_deinit_(&sl->master);
+
     timer_deinit(&sl->master_gone_tmr);
     timer_deinit(&sl->poll_tmr);
     timer_deinit(&sl->mastering_tmr);

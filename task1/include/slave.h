@@ -41,7 +41,7 @@ struct slave {
     master_t master;
 };
 
-void slave_init(slave_t *sl, io_service_t *iosvc,
+bool slave_init(slave_t *sl, io_service_t *iosvc,
                 const char *iface);
 void slave_deinit(slave_t *sl);
 void slave_run(slave_t *sl);

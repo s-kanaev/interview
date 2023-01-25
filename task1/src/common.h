@@ -1,6 +1,7 @@
 #ifndef _COMMON_H_
 # define _COMMON_H_
 
+# include "io-service.h"
 # include <stdint.h>
 
 struct addrinfo;
@@ -27,5 +28,14 @@ int fetch_broadcast_addr(int sfd,
                          const char *iface,
                          struct sockaddr *braddr);
 
+/**
+ * Post a job to wait for sigterm, sigint through \c io_serivce_t instance.
+ * \param [in] iosvc io service instance
+ * \return \c true on success, \c false on failure
+ *
+ * The job will stop io service instance without waiting
+ * for pending jobs.
+ */
+bool wait_for_sigterm_sigint(io_service_t *iosvc);
 
 #endif /* _COMMON_H_ */
