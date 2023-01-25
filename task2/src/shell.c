@@ -10,9 +10,12 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define streq(a, b)         (0 == strcmp((a), (b)))
 #define DELIM               " "
@@ -20,7 +23,7 @@
 #define HELP_CMD            "help"
 #define CMD_CMD             "cmd"
 
-#define PROMPT              ">"
+#define PROMPT              "> "
 #define PROMPT_LEN          (sizeof(PROMPT) - 1)
 
 #define HELP_MSG                                    \
@@ -143,6 +146,66 @@ static
 void writer(usc_t *usc, int error, shell_t *sh);
 
 /********************** private **********************/
+bool check_unix_socket(shell_t *sh, const char *name, size_t name_len) {
+    int rc;
+    struct stat st;
+
+    rc = stat(name, &st);
+
+    if (rc) {
+        LOG(LOG_LEVEL_WARN, "Can't stat %*s: %s\n",
+            name_len, name, strerror(errno));
+        return false;
+    }
+
+    return S_ISSOCK(st.st_mode);
+}
+
+bool parse_unix_socket_name(shell_t *sh,
+                            const char *name, size_t name_len,
+                            driver_description_t *dd) {
+    /* path/name.slot.drv */
+    size_t back = name_len - 1;
+    size_t name_start, name_end;
+    size_t slot_start, slot_end;
+
+    while (back > 0 && name[back] != '/')
+        -- back;
+
+    if (0 == back)
+        return false;
+
+    for (name_start = name_end = back;
+         name_end < name_len && name[name_end] != '.'; ++name_end);
+
+    if (name_end == name_start || name_end == name_len)
+        return false;
+
+    for (slot_start = slot_end = name_end + 1;
+         slot_end < name_len && name[slot_end] != '.' &&
+         isdigit(name[slot_end]); ++slot_end);
+
+    if (slot_end == slot_start || slot_end == name_len || name[slot_end] != '.')
+        return false;
+
+    if (name_len - slot_end != name_len - SUFFIX_LEN - 1)
+        return false;
+
+    if (strncmp(name + slot_end + 1, SUFFIX, SUFFIX_LEN))
+        return false;
+
+    dd->driver_name = name + name_start;
+    dd->driver_name_len = name_end - name_start;
+    dd->slot_number = atoi(name + slot_start);
+
+    LOG(LOG_LEVEL_DEBUG, "Name parsed: %*s -> %*s (%u)\n",
+        name_len, name, dd->driver_name_len, dd->driver_name,
+        dd->slot_number);
+
+    return true;
+}
+
+
 void print_drv(shell_t *sh, avl_tree_node_t *atn) {
     shell_driver_t *sd;
     size_t idx;
@@ -405,6 +468,9 @@ void shift_input(shell_t *sh) {
 void on_input(int fd, io_svc_op_t op, shell_t *sh) {
     int pending;
     int rc;
+    size_t old_size = sh->input_buffer.user_size;
+    ssize_t current_read;
+    size_t bytes_read;
 
     rc = ioctl(fd, FIONREAD, &pending);
 
@@ -414,7 +480,30 @@ void on_input(int fd, io_svc_op_t op, shell_t *sh) {
         abort();
     }
 
+    if (0 == pending) /* EOF */ {
+        io_service_stop(sh->iosvc, false);
+        return;
+    }
+
     buffer_realloc(&sh->input_buffer, sh->input_buffer.user_size + pending);
+
+    bytes_read = 0;
+    while (pending) {
+        current_read = read(fd, sh->input_buffer.data + old_size + bytes_read,
+                            pending);
+        if (current_read < 0) {
+            if (errno == EINTR)
+                continue;
+            else {
+                LOG(LOG_LEVEL_FATAL, "Can't read input: %s\n",
+                    strerror(errno));
+                abort();
+            }
+        }
+
+        bytes_read += current_read;
+        pending -= current_read;
+    }
 
     while (detect_newline_on_input(sh)) {
         run_command_from_input(sh);
@@ -863,7 +952,9 @@ void shell_run(shell_t *sh) {
 
     assert(sh);
 
-    wd = inotify_add_watch(sh->inotify_fd, sh->base_path,
+    chdir(sh->base_path);
+
+    wd = inotify_add_watch(sh->inotify_fd, ".",
                            IN_CREATE | IN_DELETE | IN_DELETE_SELF |
                             IN_EXCL_UNLINK | IN_ONLYDIR);
 
@@ -877,6 +968,8 @@ void shell_run(shell_t *sh) {
     sh->base_path_watch_descriptor = wd;
 
     sh->running = true;
+
+    fprintf(sh->output, PROMPT);
 
     io_service_post_job(sh->iosvc, sh->inotify_fd,
                         IO_SVC_OP_READ, !IOSVC_JOB_ONESHOT,
