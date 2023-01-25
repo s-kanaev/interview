@@ -1,12 +1,15 @@
 #include "master.h"
 #include "master-private.h"
 #include "protocol.h"
+#include "log.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
 
 #include <netdb.h>
 #include <netinet/in.h>
@@ -23,7 +26,7 @@ void timeout(master_t *m) {
     request.s.s = PR_REQUEST;
 
     sendto(m->udp_socket, &request, sizeof(request), 0,
-           &m->bcast_addr, sizeof(m->bcast_addr));
+           (struct sockaddr *)&m->bcast_addr, sizeof(m->bcast_addr));
 }
 
 static
@@ -39,14 +42,24 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
 
     /* peek */
     ret = ioctl(fd, FIONREAD, &pending);
-    assert(0 == ret);
+    if (ret != 0) {
+        LOG(LOG_LEVEL_FATAL,
+            "Can't pending datagram size with ioctl(FIONREAD): %s\n",
+            strerror(errno));
+        abort();
+    }
 
     if (pending > PR_MAX_SIZE || pending < PR_MIN_SIZE) {
         /* discard this datagram */
         /* read big chunks */
         while (pending >= PR_MAX_SIZE) {
             bytes_read = recv(fd, buffer, PR_MAX_SIZE, 0);
-            assert(bytes_read > 0);
+            if (bytes_read < 0) {
+                LOG(LOG_LEVEL_FATAL,
+                    "Can't read data: %s\n",
+                    strerror(errno));
+                abort();
+            }
 
             pending -= bytes_read;
         }
@@ -54,7 +67,12 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
         /* red the rest */
         while (pending) {
             bytes_read = recv(fd, buffer, pending, 0);
-            assert(bytes_read > 0);
+            if (bytes_read < 0) {
+                LOG(LOG_LEVEL_FATAL,
+                    "Can't read data: %s\n",
+                    strerror(errno));
+                abort();
+            }
 
             pending -= bytes_read;
         }
@@ -67,7 +85,12 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
     while (pending) {
         bytes_read = recvfrom(fd, (uint8_t *)(buffer) + buf_size, pending, 0,
                               (struct sockaddr *)&remote_addr, &remote_addr_len);
-        assert(bytes_read >= 0);
+        if (bytes_read < 0) {
+            LOG(LOG_LEVEL_FATAL,
+                "Can't read data: %s\n",
+                strerror(errno));
+            abort();
+        }
 
         pending -= bytes_read;
         buf_size += bytes_read;
@@ -76,11 +99,23 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
     /* parse and act */
     packet = (pr_signature_t *)buffer;
 
-    if (packet->s >= PR_COUNT)  /* invalid, discard*/
-        return;
+    if (packet->s >= PR_COUNT) {
+        /* invalid, discard*/
+        LOG(LOG_LEVEL_WARN,
+            "Invalid signature received: %#02x\n",
+            (int)(packet->s));
 
-    if (buf_size != PR_STRUCT_EXPECTED_SIZE[packet->s]) /* invalid, discard */
         return;
+    }
+
+    if (buf_size != PR_STRUCT_EXPECTED_SIZE[packet->s]) {
+        /* invalid, discard */
+        LOG(LOG_LEVEL_WARN,
+            "Invalid size of datagram received: %lu instead of %lu\n",
+            buf_size, PR_STRUCT_EXPECTED_SIZE[packet->s]);
+
+        return;
+    }
 
     master_act(m, packet, fd, (struct sockaddr_in *)&remote_addr);
 }
@@ -91,7 +126,7 @@ void reset_master(master_t *m) {
     reset.s.s = PR_RESET_MASTER;
 
     sendto(m->udp_socket, &reset, sizeof(reset), 0,
-           &m->bcast_addr, sizeof(m->bcast_addr));
+           (struct sockaddr *)&m->bcast_addr, sizeof(m->bcast_addr));
 }
 
 static
@@ -105,7 +140,7 @@ void send_info_message(master_t *m, uint8_t brightness, int fd) {
     /*msg.text[sizeof(msg.text) - 1] = '\0';*/
 
     sendto(m->udp_socket, &msg, sizeof(msg), 0,
-           &m->bcast_addr, sizeof(m->bcast_addr));
+           (struct sockaddr *)&m->bcast_addr, sizeof(m->bcast_addr));
 }
 
 /**************** private API ****************/
@@ -233,12 +268,14 @@ master_act(master_t *m, const pr_signature_t *packet, int fd,
 
 void
 master_set_broadcast_addr(master_t *m, struct sockaddr *bcast_addr) {
-    memcpy(&m->bcast_addr, bcast_addr, sizeof(m->bcast_addr));
+    memcpy(&m->bcast_addr, bcast_addr, sizeof(*bcast_addr));
+    m->bcast_addr.sin_port = htons(SLAVE_UDP_PORT);
 }
 
 /**************** public API ****************/
 void master_init(master_t *m, io_service_t *iosvc,
-                 const char *local_addr) {
+                 const char *local_addr,
+                 const char *iface) {
     static const int BROADCAST = 1;
     static const int REUSE_ADDR = 1;
     int sfd;
@@ -247,7 +284,7 @@ void master_init(master_t *m, io_service_t *iosvc,
     struct addrinfo hint;
     struct ifreq ifreq;
 
-    assert(m && iosvc);
+    assert(m && iosvc && local_addr && iface);
 
     master_init_(m, iosvc);
 
@@ -258,7 +295,13 @@ void master_init(master_t *m, io_service_t *iosvc,
     hint.ai_protocol = 0;
     hint.ai_flags = AI_PASSIVE;
     ret = getaddrinfo(local_addr, MASTER_UDP_PORT_STR, &hint, &addr_info);
-    assert(0 == ret);
+
+    if (ret != 0) {
+        LOG(LOG_LEVEL_FATAL,
+            "Couldn't getaddrinfo: %s\n",
+            strerror(errno));
+        abort();
+    }
 
     for (cur_addr = addr_info; cur_addr != NULL; cur_addr = cur_addr->ai_next) {
         sfd = socket(cur_addr->ai_family,
@@ -273,30 +316,55 @@ void master_init(master_t *m, io_service_t *iosvc,
         ret = setsockopt(sfd,
                          SOL_SOCKET, SO_BROADCAST,
                          &BROADCAST, sizeof(BROADCAST));
-        assert(0 == ret);
+
+        if (ret != 0) {
+            LOG(LOG_LEVEL_FATAL,
+                "Can't set socket option (SO_BROADCAST): %s\n",
+                strerror(errno));
+            abort();
+        }
 
         ret = setsockopt(sfd,
                          SOL_SOCKET, SO_REUSEADDR,
                          &REUSE_ADDR, sizeof(REUSE_ADDR));
-        assert(0 == ret);
 
-        if (!bind(sfd, cur_addr->ai_addr, cur_addr->ai_addrlen))
+        if (ret != 0) {
+            LOG(LOG_LEVEL_FATAL,
+                "Can't set socket option (SO_REUSEADDR): %s\n",
+                strerror(errno));
+            abort();
+        }
+
+        if (!bind(sfd, cur_addr->ai_addr, cur_addr->ai_addrlen)) {
             break;
+        }
 
         shutdown(sfd, SHUT_RDWR);
         close(sfd);
     }
 
-    assert(NULL == cur_addr);
+    if (cur_addr == NULL) {
+        LOG(LOG_LEVEL_FATAL,
+            "Can't locate suitable address for %s\n",
+            local_addr);
+        abort();
+    }
 
     m->udp_socket = sfd;
     memcpy(&m->local_addr, cur_addr->ai_addr, sizeof(cur_addr->ai_addrlen));
 
     /* fetch broadcast addr */
     memset(&ifreq, 0, sizeof(ifreq));
+    strncpy(ifreq.ifr_name, iface, IFNAMSIZ - 1);
     ret = ioctl(m->udp_socket, SIOCGIFBRDADDR, &ifreq);
 
-    assert(0 == ret);
+    if (ret != 0) {
+        LOG(LOG_LEVEL_FATAL,
+            "Can't fetch broadcast address with ioctl(SIOCGIFBRDADDR): %s\n",
+            strerror(errno));
+        abort();
+    }
+
     master_set_broadcast_addr(m, &(ifreq.ifr_broadaddr));
 }
 

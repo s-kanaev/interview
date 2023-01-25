@@ -35,12 +35,13 @@ struct master {
     avl_tree_t slaves;
 
     struct sockaddr_storage local_addr;
-    struct sockaddr bcast_addr;
+    struct sockaddr_in bcast_addr;
     int udp_socket;
 };
 
 void master_init(master_t *m, io_service_t *iosvc,
-                 const char *local_addr);
+                 const char *local_addr,
+                 const char *iface);
 void master_deinit(master_t *m);
 void master_run(master_t *m);
 
