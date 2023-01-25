@@ -120,7 +120,7 @@ void reader(uss_t *srv, uss_connection_t *conn,
                                 (uss_writer_t)writer, core);
         buffer_deinit(&response);
         return;
-    }
+    }   /* if (!argc) */
 
     if (state->argc == state->args_received) {
         LOG(LOG_LEVEL_DEBUG, "Calling %*s with %d arguments\n",
@@ -144,24 +144,48 @@ void reader(uss_t *srv, uss_connection_t *conn,
         buffer_deinit(&response);
 
         return;
-    }
+    }   /* if (state->argc == state->args_received) */
 
     /* TODO receive full arguments vector */
+    if (0 == state->last_argument_offset)
+        state->last_argument_offset = sizeof(*dc);
+
     dca = (const pr_driver_command_argument_t *)(
         (const uint8_t *)s + state->last_argument_offset
     );
 
-    while ((state->args_received < state->argc) &&
-           (conn->read_task.b.user_size >= state->last_argument_offset + dca->len)) {
-        ++state->args_received;
-        state->last_argument_offset += sizeof(*dca) + dca->len;
-        dca = (const pr_driver_command_argument_t *)(
-            (const uint8_t *)(dca + 1) + dca->len
-        );
+    if (conn->read_task.b.user_size < state->last_argument_offset
+                                            + sizeof(*dca)) {
+        required_length = state->last_argument_offset + sizeof(*dca);
+        conn->read_task.b.offset = conn->read_task.b.user_size;
+        unix_socket_server_recv(
+            srv, conn,
+            required_length - conn->read_task.b.user_size,
+            (uss_reader_t)reader,
+            core);
+
+        return;
     }
 
+    if (conn->read_task.b.user_size < state->last_argument_offset
+                                            + sizeof(*dca) + dca->len) {
+        required_length = state->last_argument_offset + sizeof(*dca)
+                            + dca->len;
+        conn->read_task.b.offset = conn->read_task.b.user_size;
+        unix_socket_server_recv(
+            srv, conn,
+            required_length - conn->read_task.b.user_size,
+            (uss_reader_t)reader,
+            core);
+
+        return;
+    }
+
+    ++state->args_received;
+    state->last_argument_offset += sizeof(*dca) + dca->len;
+    required_length = state->last_argument_offset + sizeof(*dca);
+
     if (state->args_received < state->argc) {
-        required_length = state->last_argument_offset + dca->len;
         conn->read_task.b.offset = conn->read_task.b.user_size;
         unix_socket_server_recv(
             srv, conn,
