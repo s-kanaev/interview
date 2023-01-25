@@ -2,9 +2,11 @@
 #include "master-private.h"
 #include "protocol.h"
 
+#include <stdio.h>
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
 
 #include <netdb.h>
 #include <netinet/in.h>
@@ -73,7 +75,37 @@ void data_received(int fd, io_svc_op_t op, master_t *m) {
 
     /* parse and act */
     packet = (pr_signature_t *)buffer;
-    master_act(m, packet, fd);
+
+    if (packet->s >= PR_COUNT)  /* invalid, discard*/
+        return;
+
+    if (buf_size != PR_STRUCT_EXPECTED_SIZE[packet->s]) /* invalid, discard */
+        return;
+
+    master_act(m, packet, fd, (struct sockaddr_in *)&remote_addr);
+}
+
+static
+void reset_master(master_t *m) {
+    pr_reset_master_t reset;
+    reset.s.s = PR_RESET_MASTER;
+
+    sendto(m->udp_socket, &reset, sizeof(reset), 0,
+           &m->bcast_addr, sizeof(m->bcast_addr));
+}
+
+static
+void send_info_message(master_t *m, uint8_t brightness, int fd) {
+    pr_msg_t msg;
+    msg.s.s = PR_MSG;
+    msg.avg_temperature = m->avg.temperature;
+    msg.brightness = brightness;
+    msg.date_time = time(NULL);
+    snprintf((char *)msg.text, sizeof(msg.text), "%d", (int)m->avg.temperature);
+    /*msg.text[sizeof(msg.text) - 1] = '\0';*/
+
+    sendto(m->udp_socket, &msg, sizeof(msg), 0,
+           &m->bcast_addr, sizeof(m->bcast_addr));
 }
 
 /**************** private API ****************/
@@ -135,14 +167,20 @@ master_update_slave(master_t *m,
     m->sum.illumination += atn_sd->illumination;
 }
 
-void
+bool
 master_calculate_averages(master_t *m) {
+    int8_t prev_temperature = m->avg.temperature;
+    uint8_t prev_illumination = m->avg.illumination;
+
     m->avg.temperature = m->slaves.count
                           ? m->sum.temperature / m->slaves.count
                           : 0;
     m->avg.illumination = m->slaves.count
                           ? m->sum.illumination / m->slaves.count
                           : 0;
+
+    return !((prev_temperature == m->avg.temperature) &&
+             (prev_illumination == m->avg.illumination));
 }
 
 uint8_t
@@ -151,14 +189,42 @@ master_calculate_brightenss(const master_t *m) {
 }
 
 void
-master_act(master_t *m, const pr_signature_t *packet, int fd) {
+master_act(master_t *m, const pr_signature_t *packet, int fd,
+           const struct sockaddr_in *remote_addr) {
+    const pr_response_t *response;
+    const pr_vote_t *vote;
+    avl_tree_node_t *updated_slave;
+    uint32_t slave_addr;
+    slave_description_t sd;
+    uint8_t brightness;
+    bool avg_changed = false;
+
     switch (packet->s) {
         case PR_RESPONSE:
-            /* TODO update slave, calculate averages, send if needs to */
+            /* parse */
+            response = (const pr_response_t *)(packet + 1);
+            slave_addr = ntohl(remote_addr->sin_addr.s_addr);
+
+            sd.illumination = response->illumination;
+            sd.temperature = response->temperature;
+
+            /* update slave, calculate averages, send new info msg if need to */
+            updated_slave = master_update_slave(m, slave_addr, &sd);
+            avg_changed = master_calculate_averages(m);
+
+            if (!avg_changed)
+                break;
+
+            brightness = master_calculate_brightenss(m);
+            send_info_message(m, brightness, fd);
             break;
+
         case PR_VOTE:
-            /* TODO send master reset packet */
+            /* send master reset packet */
+            vote = (const pr_vote_t *)(vote + 1);
+            reset_master(m);
             break;
+
         default:
             /* do nothing if the packet is neither response nor vote */
             break;
