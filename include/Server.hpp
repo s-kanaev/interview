@@ -10,6 +10,7 @@
 namespace http = boost::network::http;
 namespace utils = boost::network::utils;
 
+// asynchronous server handler struct
 struct AsyncRequestHandler;
 // asynchronous server type
 typedef http::async_server<AsyncRequestHandler> async_server;
