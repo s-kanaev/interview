@@ -1,7 +1,7 @@
 #ifndef _DATABASE_HPP
 #define _DATABASE_HPP
 
-// #include "Server.hpp"
+#include "Server.hpp"
 #include "Cache.hpp"
 #include "DBReply.hpp"
 #include "common.hpp"
@@ -62,7 +62,7 @@ protected:
     std::string m_table;
 
     DBReply m_dbreply;
-    std::vector<std::shared_ptr<DBRecord>> m_dbrecords;
+    std::shared_ptr<std::vector<std::shared_ptr<DBRecord>>> m_dbrecords;
     Cache<bigserial_t, std::shared_ptr<DBRecord>> m_cache;
 
     // db thread mutex

@@ -58,10 +58,6 @@ public:
 //     char *first_name, *last_name, *birth_date;
 // } DBRecord;
 
-struct AsyncRequestHandler;
-typedef http::async_server<AsyncRequestHandler> async_server;
-// typedef async_server::connection_ptr connection_object;
-
 extern boost::network::utils::thread_pool threadPool;
 
 #endif
