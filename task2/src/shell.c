@@ -820,7 +820,7 @@ void base_dir_smth_deleted(shell_t *sh, const char *name, size_t name_len) {
         if (sd->name_len != dd.driver_name_len)
             continue;
 
-        if ((0 == strncmp(sd->name, dd.driver_name, name_len)) &&
+        if ((0 == strncmp(sd->name, dd.driver_name, sd->name_len)) &&
             sd->slot == dd.slot_number)
             break;
     }
