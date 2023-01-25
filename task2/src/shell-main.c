@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    if (!shell_init(&sh, DIR, DIR_LEN, &iosvc, STDIN_FILENO, stdout)) {
+    if (!shell_init(&sh, BASE_DIR, BASE_DIR_LEN, &iosvc, STDIN_FILENO, stdout)) {
         LOG(LOG_LEVEL_FATAL, "Can't initialize shell: %s\n",
             strerror(errno));
         exit(1);

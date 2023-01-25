@@ -268,7 +268,7 @@ bool acceptor(uss_t *srv, uss_connection_t *conn, driver_core_t *core) {
 bool driver_core_init_(io_service_t *iosvc,
                        driver_core_t *core,
                        driver_payload_t *payload) {
-    size_t path_len = DIR_LEN + SLASH_LEN
+    size_t path_len = BASE_DIR_LEN + SLASH_LEN
                       + payload->name_len + DOT_LEN
                       + MAX_DIGITS + DOT_LEN
                       + SUFFIX_LEN + 1;
@@ -285,8 +285,8 @@ bool driver_core_init_(io_service_t *iosvc,
     if (path_len > UNIX_PATH_MAX)
         return false;
 
-    memcpy(path + offset, DIR, DIR_LEN);
-    offset += DIR_LEN;
+    memcpy(path + offset, BASE_DIR, BASE_DIR_LEN);
+    offset += BASE_DIR_LEN;
     memcpy(path + offset, SLASH, SLASH_LEN);
     offset += SLASH_LEN;
     memcpy(path + offset, payload->name, payload->name_len);
