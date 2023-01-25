@@ -8,7 +8,8 @@ void ParenthesisChecker::Context::newBlock() {
 
 ParenthesisChecker::ParenthesisChecker()
 : _opening('('),
-  _closing(')')
+  _closing(')'),
+  _state(State::wait_for_open)
 {
     /* empty */
 }
@@ -25,6 +26,7 @@ bool ParenthesisChecker::reset(char opening, char closing) {
     _opening = opening;
     _closing = closing;
 
+    _state = State::wait_for_open;
     _context = Context();
 }
 
