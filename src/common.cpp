@@ -12,8 +12,8 @@
 boost::shared_ptr<boost::asio::io_service> iOService(
         new boost::asio::io_service(THREADS_COUNT));
 // lets prevent io_servvice shutdown when its workers quit
-boost::shared_ptr<boost::asio::io_service::work> iOServiceWork(
-        new boost::asio::io_service::work(boost::ref(*iOService)));
+//boost::shared_ptr<boost::asio::io_service::work> iOServiceWork(
+//        new boost::asio::io_service::work(boost::ref(*iOService)));
 // thread group for thread pool
 boost::shared_ptr<boost::thread_group> threadGroup(
         new boost::thread_group());

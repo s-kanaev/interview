@@ -62,7 +62,7 @@ public:
 
 // io service for thread pool
 extern boost::shared_ptr<boost::asio::io_service> iOService;
-extern boost::shared_ptr<boost::asio::io_service::work> iOServiceWork;
+//extern boost::shared_ptr<boost::asio::io_service::work> iOServiceWork;
 // thread group for thread pool
 extern boost::shared_ptr<boost::thread_group> threadGroup;
 
