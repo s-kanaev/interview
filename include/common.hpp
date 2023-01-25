@@ -3,14 +3,16 @@
 
 #include <boost/network/protocol/http/server.hpp>
 #include <boost/network/utils/thread_pool.hpp>
+#include <boost/shared_ptr.hpp>
 #include <boost/fusion/adapted/std_pair.hpp>
 
+// bigserial database type definition (should be only greater than nil)
 typedef unsigned long long int bigserial_t;
-typedef long long int fake_bigserial_t;
 
 namespace http = boost::network::http;
 namespace utils = boost::network::utils;
 
+// request type enumeration
 typedef enum _RequestType {
     REQUEST_POST,
     REQUEST_DELETE,
@@ -18,20 +20,23 @@ typedef enum _RequestType {
     REQUEST_INVALID
 } RequestType;
 
+// POST request descriptor
 typedef struct _PostRequest {
-    bigserial_t id; // -1 if not set
+    bigserial_t id; // 0 if not set
     char *first_name, *last_name, *birth_date; // NULL if not set
 } PostRequest;
 
+// DELETE request descriptor
 typedef struct _DeleteRequest {
     bigserial_t id; // should be no less than nil
 } DeleteRequest;
 
+// GET request descriptor
 typedef struct _GetRequest {
     bigserial_t id; // -1 to retrieve all records
 } GetRequest;
 
-// request to db structure
+// unified request descriptor
 typedef struct _DBRequest {
     RequestType request_type;
     union {
@@ -41,12 +46,14 @@ typedef struct _DBRequest {
     } any_request;
 } DBRequest;
 
+// kind of reply from db
 typedef enum _DBReplyKind {
     REPLY_OK,           // 200
     REPLY_BAD_REQUEST,  // 400
     REPLY_NOT_FOUND     // 404
 } DBReplyKind;
 
+// database record descriptor for use with db reply
 class DBRecord {
 public:
     bigserial_t id;
@@ -54,10 +61,11 @@ public:
 };
 
 // typedef struct _DBRecord {
-    //     int id;
+//     int id;
 //     char *first_name, *last_name, *birth_date;
 // } DBRecord;
 
-extern boost::network::utils::thread_pool threadPool;
+// thread pool
+extern boost::shared_ptr<boost::network::utils::thread_pool> threadPool;
 
 #endif
