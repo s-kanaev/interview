@@ -9,7 +9,7 @@
 struct unix_socket_client;
 typedef struct unix_socket_client usc_t;
 
-typedef bool (*usc_acceptor_t)(usc_t *usc, void *ctx);
+typedef bool (*usc_connector_t)(usc_t *usc, void *ctx);
 typedef void (*usc_reader_t)(usc_t *usc,
                              int error,
                              void *ctx);
@@ -22,19 +22,21 @@ struct unix_socket_client {
 
     int fd;
 
+    bool eof;
+
+    usc_connector_t connector;
+
     struct {
         usc_reader_t reader;
         void *ctx;
-        void *d;
-        size_t waiting;
+        buffer_t b;
         size_t currently_read;
     } read_task;
 
     struct {
         usc_writer_t writer;
         void *ctx;
-        const void *d;
-        size_t total;
+        buffer_t b;
         size_t currently_wrote;
     } write_task;
 };
@@ -54,7 +56,7 @@ void unix_socket_client_send(usc_t *usc,
                              usc_writer_t writer,
                              void *ctx);
 void unix_socket_client_recv(usc_t *usc,
-                             void *d, size_t sz,
+                             size_t sz,
                              usc_reader_t reader,
                              void *ctx);
 
