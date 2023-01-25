@@ -123,9 +123,7 @@ void master_init(master_t *m, io_service_t *iosvc,
     master_init_(m, iosvc);
 
     /* find suitable local address */
-    m->udp_socket = allocate_udp_broadcasting_socket(local_addr,
-                                                     UDP_PORT_STR,
-                                                     &addr);
+    m->udp_socket = allocate_udp_broadcasting_socket(iface, UDP_PORT);
 
     if (m->udp_socket < 0) {
         LOG(LOG_LEVEL_FATAL,

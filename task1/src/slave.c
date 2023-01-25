@@ -438,9 +438,7 @@ void slave_init(slave_t *sl, io_service_t *iosvc,
     timer_init(&sl->mastering_tmr, sl->iosvc);
 
     /* find suitable local address */
-    sl->udp_socket = allocate_udp_broadcasting_socket(local_addr,
-                                                     UDP_PORT_STR,
-                                                     &addr);
+    sl->udp_socket = allocate_udp_broadcasting_socket(iface, UDP_PORT);
 
     if (sl->udp_socket < 0) {
         LOG(LOG_LEVEL_FATAL,
