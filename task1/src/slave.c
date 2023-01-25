@@ -24,17 +24,27 @@
 
 #define MASTERING_TIMEOUT_MSEC      (MASTER_REQUEST_TIMEOUT_MSEC / 2)
 
-typedef void (slave_actor_t)(slave_t *m, const pr_signature_t *packet, int fd,
-                             const struct sockaddr_in *remote_addr);
+typedef void (* slave_actor_t)(slave_t *m, const pr_signature_t *packet, int fd,
+                               const struct sockaddr_in *remote_addr);
 
 static
 void slave_master_timed_out(slave_t *sl);
 static
-slave_actor_t slave_act,
-              slave_act_idle,
-              slave_act_poll,
-              slave_act_master,
-              slave_act_waiting_master;
+void slave_act(slave_t *m, const pr_signature_t *packet, int fd,
+               const struct sockaddr_in *remote_addr);
+static
+void slave_act_idle(slave_t *m, const pr_signature_t *packet, int fd,
+                    const struct sockaddr_in *remote_addr);
+static
+void slave_act_poll(slave_t *m, const pr_signature_t *packet, int fd,
+                    const struct sockaddr_in *remote_addr);
+static
+void slave_act_master(slave_t *m, const pr_signature_t *packet, int fd,
+                      const struct sockaddr_in *remote_addr);
+static
+void slave_act_waiting_master(slave_t *m, const pr_signature_t *packet, int fd,
+                              const struct sockaddr_in *remote_addr);
+
 static
 void data_received(int fd, io_svc_op_t op, slave_t *sl);
 
@@ -69,7 +79,7 @@ void slave_mastering_timeout(slave_t *sl);
 
 /* static data */
 static const
-slave_actor_t *ACTORS[] = {
+slave_actor_t ACTORS[] = {
     [SLAVE_IDLE]            = slave_act_idle,
     [SLAVE_POLLING]         = slave_act_poll,
     [SLAVE_MASTER]          = slave_act_master,
