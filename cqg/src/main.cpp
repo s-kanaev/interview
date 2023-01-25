@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
         if (!stillValid) {
             printStatus(lineCounter, stillValid, checker.getContext());
-            input.readUntilNewline(&line, &len);
+            newLineFound = input.readUntilNewline(&line, &len, newLineFound);
 
             checker.reset();
             ++lineCounter;
@@ -80,7 +80,9 @@ int main(int argc, char **argv) {
 
     if (!line && errno) {
         std::cerr << "Read error: "
-                  << strerror(errno);
+                  << strerror(errno)
+                  << " at line "
+                  << lineCounter;
 
         return RET_READ_FAILURE;
     }

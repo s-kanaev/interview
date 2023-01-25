@@ -28,12 +28,23 @@ Input::~Input() {
     /* empty */
 }
 
-void Input::readUntilNewline(char **line, ssize_t *len) {
+bool Input::readUntilNewline(char **line, ssize_t *len,
+                             bool alreadyNewLine) {
     bool result;
 
-    do {
-        result = readAndDetectNewline(line, len);
-    } while (!result && *line);
+    if (!alreadyNewLine) {
+        do {
+            result = readAndDetectNewline(line, len);
+        } while (!result && *line);
+    }
+
+    if (!(*line))
+    {
+        /* some failure obviously has hapened */
+        return false;
+    }
+
+    return readAndDetectNewline(line, len);
 }
 
 void Input::start(char **line, ssize_t *len) {
@@ -79,9 +90,11 @@ bool Input::readAndDetectNewline(char **line, ssize_t *len) {
 
     /* check if line break is in the chunk read */
     char *b = _prevNewline;
-    _prevNewline = reinterpret_cast<char *>(memchr(b, _delim, _buffer.size()));
+    char *nl = reinterpret_cast<char *>(memchr(b, _delim, _buffer.size()));
 
     *line = b;
+
+    _prevNewline = nl;
 
     if (_prevNewline) {
         /* skip the delimiting character */
@@ -97,7 +110,7 @@ bool Input::readAndDetectNewline(char **line, ssize_t *len) {
         _prevNewline = reinterpret_cast<char *>(_buffer.data()) + _buffer.size();
     }   /* if (_prevNewline) { - else */
 
-    return !!_prevNewline;
+    return !!nl;
 }
 
 ssize_t Input::_readAnotherBlock() {

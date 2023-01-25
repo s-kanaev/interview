@@ -45,10 +45,6 @@ bool ParenthesisChecker::validate(const char *str, size_t length) {
                 assert(0);
                 break;
         }
-
-        if (!result) {
-            break;
-        }
     }
 
     return result;

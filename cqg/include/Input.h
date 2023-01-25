@@ -83,8 +83,14 @@ public:
      * Skip the rest of the line.
      * The same as for \c readAndDetectNewline rules
      * for \c *line and \c *len apply here
+     *
+     * \param alreadyNewLine if the newline was already detected by
+     *                       previous call to \c readAndDetectNewline
+     * \return the same as \c readAndDetectNewline
      */
-    void readUntilNewline(char **line, ssize_t *len);
+    bool readUntilNewline(char **line,
+                          ssize_t *len,
+                          bool alreadyNewLine);
 };
 
 #endif /* INPUT_H */
