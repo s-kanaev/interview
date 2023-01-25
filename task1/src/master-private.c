@@ -163,7 +163,7 @@ master_act(master_t *m, const pr_signature_t *packet, int fd,
 }
 
 void
-master_set_broadcast_addr(master_t *m, struct sockaddr *bcast_addr) {
+master_set_broadcast_addr(master_t *m, const struct sockaddr *bcast_addr) {
     memcpy(&m->bcast_addr, bcast_addr, sizeof(*bcast_addr));
     m->bcast_addr.sin_port = htons(UDP_PORT);
 }
