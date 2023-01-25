@@ -157,7 +157,7 @@ void slave_poll(slave_t *sl) {
     uint32_t v;
 
     rnd = random();
-    v = rnd & 0xffffffff;
+    v = (rnd & 0xfffffffe) + 1; /* exclude vote of zero */
 
     LOG(LOG_LEVEL_DEBUG,
         "Voting: %#08x, will send: %d\n",
@@ -283,6 +283,9 @@ do {                                        \
                 (unsigned int)sl->vote_sent,
                 (unsigned int)sl->max_vote_per_poll);
 
+            if (sl->vote_sent)
+                break;
+
             IDLE;
 
             slave_prepare_to_poll(sl, (const pr_vote_t *)packet);
@@ -331,10 +334,6 @@ void slave_act_waiting_master(slave_t *sl, const pr_signature_t *packet, int fd,
                 (unsigned int)(((const pr_vote_t *)packet)->vote),
                 (unsigned int)sl->vote_sent,
                 (unsigned int)sl->max_vote_per_poll);
-
-            slave_disarm_master_gone_timer(sl);
-            slave_prepare_to_poll(sl, (const pr_vote_t *)packet);
-            slave_initialize_master_polling(sl);
             break;
 
         case PR_RESET_MASTER:
@@ -380,7 +379,9 @@ void slave_finish_master_polling(slave_t *sl, slave_state_t new_state) {
         slave_disarm_poll_timer(sl);
 
     sl->state = new_state;
-    sl->vote_sent = sl->max_vote_per_poll = 0;
+
+    if (SLAVE_WAITING_MASTER != sl->state)
+        sl->vote_sent = sl->max_vote_per_poll = 0;
 
     if (SLAVE_WAITING_MASTER == sl->state)
         slave_arm_master_gone_timer(sl);
