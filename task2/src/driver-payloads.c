@@ -217,7 +217,7 @@ void driver_payload_one(driver_payload_t *dp,unsigned int slot) {
 
     vector_init(&dp->commands, sizeof(driver_command_t), 0);
     dc = (driver_command_t *)vector_append(&dp->commands);
-    dc->description = "O1 is the first command ever. For One driver only\n.";
+    dc->description = "O1 is the first command ever. For One driver only";
     dc->description_len = strlen(dc->description);
     dc->handler = one_o1;
     dc->name = "o1";
@@ -225,7 +225,7 @@ void driver_payload_one(driver_payload_t *dp,unsigned int slot) {
     dc->max_arity = 1;
 
     dc = (driver_command_t *)vector_append(&dp->commands);
-    dc->description = "O2 is the second command for One driver\n.";
+    dc->description = "O2 is the second command for One driver";
     dc->description_len = strlen(dc->description);
     dc->handler = one_o2;
     dc->name = "o2";
@@ -233,7 +233,7 @@ void driver_payload_one(driver_payload_t *dp,unsigned int slot) {
     dc->max_arity = 3;
 
     dc = (driver_command_t *)vector_append(&dp->commands);
-    dc->description = "O3 is the third command for One driver\n.";
+    dc->description = "O3 is the third command for One driver";
     dc->description_len = strlen(dc->description);
     dc->handler = one_o3;
     dc->name = "o3";
@@ -259,7 +259,7 @@ void driver_payload_two(driver_payload_t *dp, unsigned int slot) {
     dc->max_arity = 2;
 
     dc = (driver_command_t *)vector_append(&dp->commands);
-    dc->description = "T2 is the second command for Two driver\n.";
+    dc->description = "T2 is the second command for Two driver";
     dc->description_len = strlen(dc->description);
     dc->handler = two_t2;
     dc->name = "t2";
