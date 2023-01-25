@@ -12,11 +12,9 @@ typedef struct unix_socket_client usc_t;
 typedef bool (*usc_acceptor_t)(usc_t *usc, void *ctx);
 typedef void (*usc_reader_t)(usc_t *usc,
                              int error,
-                             void *d, size_t sz,
                              void *ctx);
 typedef void (*usc_writer_t)(usc_t *usc,
                              int error,
-                             const void *d, size_t sz,
                              void *ctx);
 
 struct unix_socket_client {
@@ -26,6 +24,7 @@ struct unix_socket_client {
 
     struct {
         usc_reader_t reader;
+        void *ctx;
         void *d;
         size_t waiting;
         size_t currently_read;
@@ -33,6 +32,7 @@ struct unix_socket_client {
 
     struct {
         usc_writer_t writer;
+        void *ctx;
         const void *d;
         size_t total;
         size_t currently_wrote;
