@@ -26,7 +26,7 @@ struct tmr {
     void *ctx;
 };
 
-void tmr_init(tmr_t *tmr, io_service_t *iosvc);
+void timer_init(tmr_t *tmr, io_service_t *iosvc);
 void timer_deinit(tmr_t *tmr);
 void timer_set_periodic(tmr_t *tmr, time_t sec, unsigned long nanosec,
                         tmr_job_t job, void *ctx);
