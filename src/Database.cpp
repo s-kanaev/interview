@@ -12,6 +12,7 @@
 
 Database::Database()
 {
+    m_do_disconnect = false;
 }
 
 Database::Database(Database const&)
@@ -21,6 +22,13 @@ Database::Database(Database const&)
 Database&
 Database::operator=(const Database&)
 {
+}
+
+Database&
+Database::getInstance(void)
+{
+    static Database m_instance;
+    return m_instance;
 }
 
 bool
@@ -37,8 +45,8 @@ Database::Connect(std::string _host,
 
     if (!_host.empty()) connection_string.append("host="+_host+" ");
     if (!_port.empty()) connection_string.append("port="+_port+" ");
-    if (!_username.empty()) connection_string.append("username="+_username+" ");
-    if (!_password.empty()) connection_string.append("password"+_password+" ");
+    if (!_username.empty()) connection_string.append("user="+_username+" ");
+    if (!_password.empty()) connection_string.append("password="+_password+" ");
     if (!_db_name.empty()) connection_string.append("dbname="+_db_name+" ");
 
     try {
@@ -58,20 +66,28 @@ Database::Connect(std::string _host,
     // create db_thread
     m_db_thread = boost::thread(&Database::DoRequest, this);
 
+    m_do_disconnect = false;
+
     return true;
 }
 
-bool
+void
 Database::Disconnect()
 {
-    // do not allow to add anything to queue
-    boost::unique_lock<boost::mutex> scoped_lock(m_queue_mutex);
+    m_do_disconnect = true;
+}
+
+void
+Database::DoDisconnect()
+{
     m_connected = false;
     m_connection.reset();
     // force connection and request queue to empty
     while (!m_connection_queue.empty()) m_connection_queue.pop();
     while (!m_request_queue.empty()) m_request_queue.pop();
 }
+
+
 
 void
 Database::Request(std::string request_string)
@@ -104,6 +120,7 @@ Database::CheckRecordByID(int id)
         _rs.append(m_table);
         _rs.append(" WHERE id = ");
         _rs.append(std::to_string(id));
+        _rs.append(";");
         Request(_rs);
         if (m_result.empty()) found = false;
         else found = true;
@@ -146,19 +163,29 @@ Database::DoPostRequest(PostRequest *post_request)
             return;
         } else {
             // POST /users/173
-            request_string.append("UPDATE "+m_table+
-                                  " SET first_name = '"+first_name+
-                                  "' last_name = '"+last_name+
-                                  "' birth_date = '"+birth_date+"'"+
-                                  "WHERE id = "+std::to_string(id)+";");
+            request_string.append("UPDATE ");
+            request_string.append(m_table);
+            request_string.append(" SET first_name = '");
+            request_string.append(first_name);
+            request_string.append("', last_name = '");
+            request_string.append(last_name);
+            request_string.append("', birth_date = '");
+            request_string.append(birth_date);
+            request_string.append("' WHERE id = ");
+            request_string.append(std::to_string(id));
+            request_string.append(";");
         }
     } else {
         // POST /users
-        request_string.append("INSERT INTO "+m_table+
-                              " (first_name, last_name, birth_date) "+
-                              "VALUES ('"+first_name+"', '"+
-                              last_name+"', "+
-                              birth_date+"');");
+        request_string.append("INSERT INTO ");
+        request_string.append(m_table);
+        request_string.append(" (first_name, last_name, birth_date) VALUES ('");
+        request_string.append(first_name);
+        request_string.append("', '");
+        request_string.append(last_name);
+        request_string.append("', '");
+        request_string.append(birth_date);
+        request_string.append("');");
     }
 
     m_cache.SetInvalid();
@@ -187,8 +214,11 @@ Database::DoDeleteRequest(DeleteRequest *delete_request)
         m_cache.SetInvalid();
         m_force_reply = false;
         // DELETE /users/173
-        request_string.append("DELETE FROM "+m_table+
-                              "WHERE id = "+std::to_string(id)+";");
+        request_string.append("DELETE FROM ");
+        request_string.append(m_table);
+        request_string.append(" WHERE id = ");
+        request_string.append(std::to_string(id));
+        request_string.append(";");
 
         Request(request_string);
         // it was delete
@@ -205,6 +235,7 @@ Database::DoGetRequest(GetRequest *get_request)
     if (!m_cache.Valid()) {
         request_string.append("SELECT id, first_name, last_name, birth_date FROM ");
         request_string.append(m_table);
+        request_string.append(";");
         Request(request_string);
 
         // renew cache
@@ -280,7 +311,7 @@ Database::DoRequest(void)
             m_connection_queue.pop();
 
             // we don't need the lock anymore
-            scoped_lock.release();
+            scoped_lock.unlock();
 
             m_dbrecords.reset(new std::vector<std::shared_ptr<DBRecord>>);
 
@@ -302,11 +333,16 @@ Database::DoRequest(void)
                     break;
             }
 
-            // TODO: launch thread to reply to client
+            // launch thread to reply to client
             //threadPool.post(boost::bind(&Server::ReplyToClient, ServerInstance, &m_dbreply, async_server::connection_ptr));
             m_dbreply.SetRecords(m_dbrecords);
-            threadPool.post(boost::bind(&ServerSendReply, m_dbreply, co));
-            m_queue_mutex.lock();
+//             threadPool->post(boost::bind(&ServerSendReply, m_dbreply, co));
+
+            scoped_lock.lock();
+            // check if there is any need to disconnect and do so
+            if (m_do_disconnect && m_request_queue.empty()) {
+                DoDisconnect();
+            }
         }
     }
 }
